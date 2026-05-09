@@ -1,5 +1,82 @@
 companies:
-  # Default demo source. The connector can auto-detect Workday from this URL.
+  # ════════════════════════════════════════════════════════════
+  #  BIG TECH  (MAANG + Microsoft)
+  # ════════════════════════════════════════════════════════════
+  - name: Microsoft
+    active: true
+    careers_url: https://apply.careers.microsoft.com
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: Meta
+    active: true
+    careers_url: https://www.metacareers.com/jobsearch
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: Apple
+    active: true
+    careers_url: https://jobs.apple.com/en-us/search?location=united-states-USA
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: Amazon
+    active: true
+    careers_url: https://www.amazon.jobs/en/
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: Netflix
+    active: true
+    careers_url: https://explore.jobs.netflix.net/careers
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: Google
+    active: true
+    careers_url: https://www.google.com/about/careers/applications/jobs/results
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  # ════════════════════════════════════════════════════════════
+  #  SEMICONDUCTORS / HARDWARE
+  # ════════════════════════════════════════════════════════════
   - name: NVIDIA
     active: true
     careers_url: https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite
@@ -12,8 +89,231 @@ companies:
     monitors:
       new_roles: true
 
-  # Add more companies either from the Source Hub UI or by editing this file.
-  # Use ats.type: auto when you only know the career URL.
+  - name: Oracle
+    active: true
+    careers_url: https://careers.oracle.com/en/sites/jobsearch
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: Qualcomm
+    active: true
+    careers_url: https://apply.appcast.io/l/qualcomm-careers-us
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: Micron
+    active: true
+    careers_url: https://careers.micron.com/careers
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  # ════════════════════════════════════════════════════════════
+  #  AI LABS
+  # ════════════════════════════════════════════════════════════
+  - name: OpenAI
+    active: true
+    careers_url: https://jobs.ashbyhq.com/openai
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: Anthropic
+    active: true
+    careers_url: https://boards.greenhouse.io/anthropic
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  # ════════════════════════════════════════════════════════════
+  #  AUTOMOTIVE / EV / AEROSPACE
+  # ════════════════════════════════════════════════════════════
+  - name: Tesla
+    active: true
+    careers_url: https://www.tesla.com/careers/search
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: SpaceX
+    active: true
+    careers_url: https://boards.greenhouse.io/spacex
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: Rivian
+    active: true
+    careers_url: https://rivian.wd5.myworkdayjobs.com/Rivian
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: General Motors
+    active: true
+    careers_url: https://search-careers.gm.com/en/jobs
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: Ford
+    active: true
+    careers_url: https://corporate.ford.com/careers/search-jobs.html
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: Toyota
+    active: true
+    careers_url: https://www.toyota.com/usa/careers/
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: KIA
+    active: true
+    careers_url: https://www.kiacareers.com/
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  # ════════════════════════════════════════════════════════════
+  #  INDUSTRIAL
+  # ════════════════════════════════════════════════════════════
+  - name: GE
+    active: true
+    careers_url: https://jobs.gecareers.com/global/en
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  # ════════════════════════════════════════════════════════════
+  #  TELECOM
+  # ════════════════════════════════════════════════════════════
+  - name: T-Mobile
+    active: true
+    careers_url: https://careers.t-mobile.com/
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  # ════════════════════════════════════════════════════════════
+  #  BANKING / FINANCE
+  # ════════════════════════════════════════════════════════════
+  - name: Bank of America
+    active: true
+    careers_url: https://careers.bankofamerica.com/en-us/job-search
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: JP Morgan Chase
+    active: true
+    careers_url: https://careers.jpmorgan.com/us/en/students
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  # ════════════════════════════════════════════════════════════
+  #  NETWORKING / SECURITY
+  # ════════════════════════════════════════════════════════════
+  - name: Infoblox
+    active: true
+    careers_url: https://www.infoblox.com/company/careers/
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  # ════════════════════════════════════════════════════════════
+  #  EXAMPLE TEMPLATES (inactive — copy/edit for new sources)
+  # ════════════════════════════════════════════════════════════
   - name: Example Workday Company
     active: false
     careers_url: https://company.wd5.myworkdayjobs.com/ExternalCareerSite
