@@ -1,0 +1,63 @@
+companies:
+  # Default demo source. The connector can auto-detect Workday from this URL.
+  - name: NVIDIA
+    active: true
+    careers_url: https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  # Add more companies either from the Source Hub UI or by editing this file.
+  # Use ats.type: auto when you only know the career URL.
+  - name: Example Workday Company
+    active: false
+    careers_url: https://company.wd5.myworkdayjobs.com/ExternalCareerSite
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: Example Greenhouse Company
+    active: false
+    careers_url: https://boards.greenhouse.io/example
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: Example Ashby Company
+    active: false
+    careers_url: https://jobs.ashbyhq.com/example
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
+
+  - name: Example Lever Company
+    active: false
+    careers_url: https://jobs.lever.co/example
+    ats:
+      type: auto
+      search_text: intern
+      us_only: true
+      include_remote: true
+      include_unknown_locations: false
+    monitors:
+      new_roles: true
