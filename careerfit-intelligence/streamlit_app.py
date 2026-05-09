@@ -154,35 +154,44 @@ section.main > div { padding-top: 1rem; max-width: 1540px; }
 @media (max-width: 1180px) { .cf-grid, .cf-command-steps { grid-template-columns:1fr 1fr; } .cf-quick-grid, .cf-source-grid { grid-template-columns:1fr; } }
 @media (max-width: 760px) { .block-container { padding-left:1rem; padding-right:1rem; } .cf-grid, .cf-command-steps { grid-template-columns:1fr; } .cf-hero { padding:24px; border-radius:22px; } .cf-job-top { flex-direction:column; } }
 
-/* ── Light-mode: main content inputs ── */
-[data-testid="stAppViewContainer"] [data-testid="stTextInput"] input,
-[data-testid="stAppViewContainer"] [data-testid="stTextArea"] textarea,
-[data-testid="stAppViewContainer"] [data-testid="stNumberInput"] input,
-[data-testid="stAppViewContainer"] [data-baseweb="input"] input,
-[data-testid="stAppViewContainer"] [data-baseweb="textarea"] textarea {
+/* ── Light-mode: ALL inputs in main area ── */
+.main input, .main textarea, .stTextInput input, .stTextArea textarea,
+[data-baseweb="input"] input, [data-baseweb="textarea"] textarea {
   background: #FFFFFF !important;
   color: #0B1220 !important;
   -webkit-text-fill-color: #0B1220 !important;
   caret-color: #2563EB !important;
+}
+.main input::placeholder, .main textarea::placeholder { color:#94A3B8 !important; -webkit-text-fill-color:#94A3B8 !important; opacity:1 !important; }
+
+/* ── Light-mode: file uploader drop zone ── */
+[data-testid="stFileUploader"] section,
+[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"],
+[data-testid="stFileUploaderDropzone"],
+[data-testid="stFileUploader"] > section > div {
+  background: #F8FAFC !important;
+  border: 1.5px dashed #CBD5E1 !important;
+  border-radius: 12px !important;
+}
+[data-testid="stFileUploader"] *,
+[data-testid="stFileUploaderDropzone"] * { color: #0B1220 !important; -webkit-text-fill-color: #0B1220 !important; }
+[data-testid="stFileUploader"] button,
+[data-testid="stFileUploaderDropzone"] button {
+  background: #FFFFFF !important;
+  color: #0B1220 !important;
+  -webkit-text-fill-color: #0B1220 !important;
   border: 1px solid #CBD5E1 !important;
 }
-[data-testid="stAppViewContainer"] input::placeholder,
-[data-testid="stAppViewContainer"] textarea::placeholder { color:#94A3B8 !important; -webkit-text-fill-color:#94A3B8 !important; opacity:1 !important; }
+/* The actual dark panel Streamlit renders for the drop zone */
+[data-testid="stFileUploader"] [class*="uploadedFile"],
+[data-testid="stFileUploader"] [class*="FileUploader"],
+[data-testid="stFileUploader"] > div > div {
+  background: #F8FAFC !important;
+  color: #0B1220 !important;
+}
 
-/* ── Light-mode: select / dropdown ── */
-[data-testid="stAppViewContainer"] [data-baseweb="select"] > div { background:#FFFFFF !important; color:#0B1220 !important; border-color:#CBD5E1 !important; }
-[data-testid="stAppViewContainer"] [data-baseweb="select"] span,
-[data-testid="stAppViewContainer"] [data-baseweb="select"] div,
-[data-testid="stAppViewContainer"] [data-baseweb="select"] svg { color:#0B1220 !important; fill:#0B1220 !important; }
-
-/* ── Light-mode: file uploader ── */
-[data-testid="stFileUploader"] { background:#FFFFFF !important; border:1.5px dashed #CBD5E1 !important; border-radius:12px !important; }
-[data-testid="stFileUploader"] * { color:#0B1220 !important; }
-[data-testid="stFileUploader"] button { background:#FFFFFF !important; color:#0B1220 !important; border:1px solid #CBD5E1 !important; }
-[data-testid="stFileUploader"] small, [data-testid="stFileUploader"] span { color:#64748B !important; }
-
-/* ── Light-mode: buttons ── */
-.stButton > button {
+/* ── Light-mode: ALL buttons (stButton + form submit) ── */
+.stButton > button, [data-testid="stFormSubmitButton"] > button {
   background-color: #2563EB !important;
   color: #FFFFFF !important;
   -webkit-text-fill-color: #FFFFFF !important;
@@ -190,18 +199,24 @@ section.main > div { padding-top: 1rem; max-width: 1540px; }
   border-radius: 10px !important;
   font-weight: 700 !important;
 }
-.stButton > button:hover { opacity: 0.88 !important; }
+.stButton > button:hover, [data-testid="stFormSubmitButton"] > button:hover { opacity: 0.88 !important; }
+/* Secondary form submit buttons (e.g. "Preview detected connector") */
+[data-testid="stFormSubmitButton"]:first-child > button,
 .stButton > button[kind="secondary"] {
   background-color: #FFFFFF !important;
-  color: #2563EB !important;
-  -webkit-text-fill-color: #2563EB !important;
-  border: 1.5px solid #2563EB !important;
+  color: #334155 !important;
+  -webkit-text-fill-color: #334155 !important;
+  border: 1.5px solid #CBD5E1 !important;
 }
 
 /* ── Light-mode: dataframe / table ── */
-[data-testid="stDataFrame"], [data-testid="stTable"] { background:#FFFFFF !important; color:#0B1220 !important; }
-[data-testid="stDataFrame"] th, [data-testid="stTable"] th { background:#F1F5F9 !important; color:#334155 !important; }
-[data-testid="stDataFrame"] td, [data-testid="stTable"] td { color:#0B1220 !important; }
+[data-testid="stDataFrame"] { background:#FFFFFF !important; }
+[data-testid="stDataFrame"] [data-testid="stDataFrameResizable"],
+[data-testid="stDataFrame"] .dvn-scroller { background:#FFFFFF !important; }
+[data-testid="stDataFrame"] canvas { filter: none !important; }
+/* Glide data grid (what st.dataframe uses internally) */
+.glideDataEditor, .gdg-style { background:#FFFFFF !important; color:#0B1220 !important; }
+.gdg-style canvas { background:#FFFFFF !important; }
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -708,7 +723,7 @@ with left:
             except Exception:
                 platforms = (c.get("ats") or {}).get("type", "custom")
             rows.append({"Company": c.get("name"), "Connector(s)": platforms, "URL": c.get("careers_url")})
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, theme="streamlit")
     cc1, cc2 = st.columns(2)
     with cc1:
         if st.button("Clear manually added employer sources", use_container_width=True):
@@ -810,14 +825,14 @@ with st.expander("Source health, analytics, and diagnostics", expanded=False):
             st.info("Run a match analysis to populate connector analytics.")
         st.markdown("### Employer fetch status")
         if st.session_state.source_stats:
-            st.dataframe(pd.DataFrame(st.session_state.source_stats), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(st.session_state.source_stats), use_container_width=True, hide_index=True, theme="streamlit")
         else:
             st.info("No source diagnostics are available yet.")
     with c2:
         st.markdown("### Parsed candidate profile sources")
         sources = [s.__dict__ for s in st.session_state.profile.sources]
         if sources:
-            st.dataframe(pd.DataFrame(sources), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(sources), use_container_width=True, hide_index=True, theme="streamlit")
         else:
             st.info("No candidate profile sources have been analyzed yet.")
         st.markdown("### Execution log")
@@ -828,7 +843,7 @@ with st.expander("Source health, analytics, and diagnostics", expanded=False):
             st.info("No execution logs are available yet.")
     st.markdown("### Fetched role table")
     if st.session_state.jobs:
-        st.dataframe(job_dataframe(st.session_state.jobs), use_container_width=True, hide_index=True)
+        st.dataframe(job_dataframe(st.session_state.jobs), use_container_width=True, hide_index=True, theme="streamlit")
     else:
         st.info("No roles have been fetched yet.")
     with st.expander("Candidate profile text preview"):
