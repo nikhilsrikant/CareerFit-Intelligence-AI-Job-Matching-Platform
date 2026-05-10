@@ -7,7 +7,7 @@ companies:
     careers_url: https://apply.careers.microsoft.com
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -19,7 +19,7 @@ companies:
     careers_url: https://www.metacareers.com/jobsearch
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -31,7 +31,7 @@ companies:
     careers_url: https://jobs.apple.com/en-us/search?location=united-states-USA
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -43,7 +43,7 @@ companies:
     careers_url: https://www.amazon.jobs/en/
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -55,7 +55,7 @@ companies:
     careers_url: https://explore.jobs.netflix.net/careers
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -67,7 +67,7 @@ companies:
     careers_url: https://www.google.com/about/careers/applications/jobs/results
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -82,7 +82,7 @@ companies:
     careers_url: https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -94,7 +94,7 @@ companies:
     careers_url: https://careers.oracle.com/en/sites/jobsearch
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -106,7 +106,7 @@ companies:
     careers_url: https://apply.appcast.io/l/qualcomm-careers-us
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -118,7 +118,7 @@ companies:
     careers_url: https://careers.micron.com/careers
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -133,7 +133,7 @@ companies:
     careers_url: https://jobs.ashbyhq.com/openai
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -145,7 +145,7 @@ companies:
     careers_url: https://boards.greenhouse.io/anthropic
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -160,7 +160,7 @@ companies:
     careers_url: https://www.tesla.com/careers/search
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -172,7 +172,7 @@ companies:
     careers_url: https://boards.greenhouse.io/spacex
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -184,7 +184,7 @@ companies:
     careers_url: https://rivian.wd5.myworkdayjobs.com/Rivian
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -196,7 +196,7 @@ companies:
     careers_url: https://search-careers.gm.com/en/jobs
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -208,7 +208,7 @@ companies:
     careers_url: https://corporate.ford.com/careers/search-jobs.html
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -220,7 +220,7 @@ companies:
     careers_url: https://www.toyota.com/usa/careers/
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -232,7 +232,7 @@ companies:
     careers_url: https://www.kiacareers.com/
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -247,7 +247,7 @@ companies:
     careers_url: https://jobs.gecareers.com/global/en
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -262,7 +262,7 @@ companies:
     careers_url: https://careers.t-mobile.com/
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -277,7 +277,7 @@ companies:
     careers_url: https://careers.bankofamerica.com/en-us/job-search
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -289,7 +289,7 @@ companies:
     careers_url: https://careers.jpmorgan.com/us/en/students
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -304,7 +304,7 @@ companies:
     careers_url: https://www.infoblox.com/company/careers/
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -319,7 +319,7 @@ companies:
     careers_url: https://company.wd5.myworkdayjobs.com/ExternalCareerSite
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -331,7 +331,7 @@ companies:
     careers_url: https://boards.greenhouse.io/example
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -343,7 +343,7 @@ companies:
     careers_url: https://jobs.ashbyhq.com/example
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
@@ -355,7 +355,7 @@ companies:
     careers_url: https://jobs.lever.co/example
     ats:
       type: auto
-      search_text: intern
+      search_text: intern entry level new grad junior associate
       us_only: true
       include_remote: true
       include_unknown_locations: false
