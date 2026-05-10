@@ -60,7 +60,7 @@ GENERIC_QUERY_TERMS = {
 
 
 # -------------------- helpers --------------------
-def clamp(value: float, low: float = 0.0, high: float = 0.99) -> float:
+def clamp(value: float, low: float = 0.0, high: float = 0.97) -> float:
     return max(low, min(high, value))
 
 
@@ -410,15 +410,16 @@ def score_job(
         else:
             # Listing-only Workday/Ashby/Lever boards may not include the full JD in fast mode.
             # A strong title + role-target overlap is therefore enough to score high, while
-            # unrelated titles remain low.
-            synergy = 0.18 if title_score >= 0.80 and role_phrase_score >= 0.40 else 0.0
+            # unrelated titles remain low. Tuned to spread scores across 0.6-0.95 instead of
+            # clamping to 0.99 — gives meaningful differentiation between top matches.
+            synergy = 0.10 if title_score >= 0.80 and role_phrase_score >= 0.40 else 0.0
             base = (
-                0.16
-                + 0.46 * title_score
-                + 0.08 * skill_score
-                + 0.10 * keyword_score
-                + 0.06 * semantic_score
-                + 0.14 * role_phrase_score
+                0.04
+                + 0.40 * title_score
+                + 0.10 * skill_score
+                + 0.12 * keyword_score
+                + 0.08 * semantic_score
+                + 0.16 * role_phrase_score
                 + synergy
             )
         base += profile_density_bonus(profile)
