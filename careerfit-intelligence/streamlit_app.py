@@ -29,7 +29,7 @@ from careerfit.matching import JobMatch, extract_intent_terms, rank_jobs
 from careerfit.source_intelligence import RuntimeProfile, build_runtime_profile
 
 APP_TITLE = "CareerFit Studio"
-DEFAULT_THRESHOLD = float(os.getenv("CAREERFIT_DEFAULT_THRESHOLD", "0.85"))
+DEFAULT_THRESHOLD = float(os.getenv("CAREERFIT_DEFAULT_THRESHOLD", "0.70"))
 RUNTIME_COMPANIES_PATH = ROOT / "data" / "runtime_companies.json"
 
 st.set_page_config(
@@ -1199,7 +1199,8 @@ else:
     with filt[2]:
         platform_filter = st.selectbox("Platform", ["All"] + sorted({m.source for m in st.session_state.matches}))
     with filt[3]:
-        view = st.selectbox("View", ["High-fit matches", "All ranked roles", "Review queue"])
+        view = st.selectbox("View", ["All ranked roles", "High-fit matches", "Review queue"], index=0,
+                           help="All ranked roles shows every fetched job sorted by score. High-fit matches shows only roles above the threshold.")
 
     matches = list(st.session_state.matches)
     if q:
