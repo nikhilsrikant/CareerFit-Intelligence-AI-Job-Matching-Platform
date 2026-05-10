@@ -582,6 +582,7 @@ def run_scan_action(
     scan_all_companies: bool,
     company_limit: int,
     parallel_workers: int,
+    max_years_experience: int = 10,
 ) -> bool:
     total_available = len(all_companies())
     companies = selected_companies_for_run(scan_all_companies, company_limit)
@@ -644,6 +645,7 @@ def run_scan_action(
             us_only=location_mode == "United States / Remote only",
             include_unknown_locations=include_unknown_locations,
             intent_terms=extract_intent_terms(search_text),
+            max_years_experience=max_years_experience,
         )
         progress.empty()
 
@@ -705,7 +707,30 @@ with st.sidebar:
     else:
         company_limit = st.number_input("Companies per scan", min_value=1, max_value=max(100, total_sources_now), value=min(total_sources_now, 5), step=1)
     parallel_workers = st.slider("Parallel fetch workers", 1, 8, int(os.getenv("CAREERFIT_COMPANY_WORKERS", "4")))
-    search_text = st.text_input("Role search keyword", value=os.getenv("CAREERFIT_DEFAULT_SEARCH", "intern"), placeholder="Examples: intern, data analyst, electrical engineer, product manager", help="Optional keyword passed to supported ATS platforms, such as intern, data analyst, electrical engineer, product manager, or designer.")
+    experience_level = st.selectbox(
+        "Experience level",
+        ["Intern only", "Entry-level only (0-2 yrs)", "Intern + Entry-level (recommended)", "All levels"],
+        index=2,
+        help="Filters results by seniority. Entry-level includes new grad, junior, associate, and roles asking for 0-2 years of experience.",
+    )
+    _level_to_search = {
+        "Intern only": "intern",
+        "Entry-level only (0-2 yrs)": "entry level new grad junior associate",
+        "Intern + Entry-level (recommended)": "intern entry level new grad junior associate",
+        "All levels": "",
+    }
+    default_search = _level_to_search.get(experience_level, "intern entry level new grad junior associate")
+    search_text = st.text_input(
+        "Role search keyword (optional override)",
+        value=os.getenv("CAREERFIT_DEFAULT_SEARCH", default_search),
+        placeholder="Examples: intern, data analyst, software engineer, product manager",
+        help="Optional keyword passed to supported ATS platforms. Leave as-is to use the experience-level preset above.",
+    )
+    max_years_experience = st.slider(
+        "Max years of experience required",
+        min_value=0, max_value=10, value=2, step=1,
+        help="Roles asking for more than this many years of experience get penalized in ranking. Set to 10 to disable.",
+    )
     location_mode = st.selectbox("Location preference", ["United States / Remote only", "Global"], index=0)
     include_unknown_locations = st.checkbox("Include roles with unspecified locations", value=False)
     fast_mode = st.toggle("Fast matching mode", value=True, help="Uses listing metadata for faster results. Disable only when deeper job-description fetching is required.")
@@ -865,11 +890,11 @@ with right:
     if run_all:
         ok = build_profile_action(url_blob, uploaded)
         if ok or allow_unprofiled_scan:
-            run_scan_action(threshold, search_text, location_mode, include_unknown_locations, fast_mode, use_cache, allow_unprofiled_scan, scan_all_companies, company_limit, parallel_workers)
+            run_scan_action(threshold, search_text, location_mode, include_unknown_locations, fast_mode, use_cache, allow_unprofiled_scan, scan_all_companies, company_limit, parallel_workers, max_years_experience)
     if build_only:
         build_profile_action(url_blob, uploaded)
     if run_scan:
-        run_scan_action(threshold, search_text, location_mode, include_unknown_locations, fast_mode, use_cache, allow_unprofiled_scan, scan_all_companies, company_limit, parallel_workers)
+        run_scan_action(threshold, search_text, location_mode, include_unknown_locations, fast_mode, use_cache, allow_unprofiled_scan, scan_all_companies, company_limit, parallel_workers, max_years_experience)
 
     st.markdown("<div class='cf-card'><h3>Suggested role targets</h3>", unsafe_allow_html=True)
     render_role_suggestions(st.session_state.profile)
