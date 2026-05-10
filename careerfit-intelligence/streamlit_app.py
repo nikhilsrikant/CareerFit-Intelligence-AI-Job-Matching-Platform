@@ -368,6 +368,68 @@ section.main > div { padding-top: 0.75rem; }
 [data-testid="stToggle"] [role="switch"][aria-checked="true"] { background: #2563EB !important; }
 [data-testid="stSlider"] div[role="slider"] { background: #2563EB !important; }
 
+/* ════════════════════════════════════════════════════════════
+   STREAMLIT NATIVE ALERTS — st.info / st.success / st.warning / st.error
+   Force readable text. Streamlit's defaults break in mixed-theme browsers.
+   ════════════════════════════════════════════════════════════ */
+[data-testid="stAlert"] {
+  border-radius: 14px !important;
+  padding: 14px 18px !important;
+  margin: 10px 0 !important;
+  border: 1px solid !important;
+  box-shadow: none !important;
+}
+/* Info (blue) */
+[data-testid="stAlertContentInfo"],
+[data-baseweb="notification"][kind="info"] {
+  background-color: #EFF6FF !important;
+  border-color: #BFDBFE !important;
+}
+[data-testid="stAlertContentInfo"] *,
+[data-baseweb="notification"][kind="info"] * {
+  color: #1E40AF !important;
+  -webkit-text-fill-color: #1E40AF !important;
+  fill: #1E40AF !important;
+}
+/* Success (green) */
+[data-testid="stAlertContentSuccess"],
+[data-baseweb="notification"][kind="positive"] {
+  background-color: #ECFDF5 !important;
+  border-color: #A7F3D0 !important;
+}
+[data-testid="stAlertContentSuccess"] *,
+[data-baseweb="notification"][kind="positive"] * {
+  color: #047857 !important;
+  -webkit-text-fill-color: #047857 !important;
+  fill: #047857 !important;
+}
+/* Warning (yellow) — THIS is the one that was unreadable */
+[data-testid="stAlertContentWarning"],
+[data-baseweb="notification"][kind="warning"] {
+  background-color: #FFFBEB !important;
+  border-color: #FDE68A !important;
+}
+[data-testid="stAlertContentWarning"] *,
+[data-baseweb="notification"][kind="warning"] * {
+  color: #92400E !important;
+  -webkit-text-fill-color: #92400E !important;
+  fill: #92400E !important;
+}
+/* Error (red) */
+[data-testid="stAlertContentError"],
+[data-baseweb="notification"][kind="negative"] {
+  background-color: #FEF2F2 !important;
+  border-color: #FECACA !important;
+}
+[data-testid="stAlertContentError"] *,
+[data-baseweb="notification"][kind="negative"] * {
+  color: #991B1B !important;
+  -webkit-text-fill-color: #991B1B !important;
+  fill: #991B1B !important;
+}
+/* Links inside alerts stay readable */
+[data-testid="stAlert"] a { text-decoration: underline !important; }
+
 /* RESPONSIVE */
 @media (max-width: 1180px) { .cf-grid, .cf-command-steps { grid-template-columns:1fr 1fr; } .cf-quick-grid, .cf-source-grid { grid-template-columns:1fr; } }
 @media (max-width: 760px) { .block-container { padding-left:1rem; padding-right:1rem; } .cf-grid, .cf-command-steps { grid-template-columns:1fr; } .cf-hero { padding:24px; border-radius:22px; } .cf-job-top { flex-direction:column; } }
@@ -518,6 +580,44 @@ h1, h2, h3, h4, h5, h6 { color: #F8FAFC !important; }
 .main table { background: #131C2F !important; border-color: rgba(148,163,184,.20) !important; }
 .main table th { background: #0E1726 !important; color: #94A3B8 !important; }
 .main table td { color: #E2E8F0 !important; border-color: rgba(148,163,184,.10) !important; }
+
+/* Streamlit native alerts — dark mode */
+[data-testid="stAlertContentInfo"],
+[data-baseweb="notification"][kind="info"] {
+  background-color: rgba(30,64,175,.22) !important;
+  border-color: rgba(147,197,253,.30) !important;
+}
+[data-testid="stAlertContentInfo"] *,
+[data-baseweb="notification"][kind="info"] * {
+  color: #BFDBFE !important; -webkit-text-fill-color: #BFDBFE !important; fill: #BFDBFE !important;
+}
+[data-testid="stAlertContentSuccess"],
+[data-baseweb="notification"][kind="positive"] {
+  background-color: rgba(4,120,87,.22) !important;
+  border-color: rgba(167,243,208,.30) !important;
+}
+[data-testid="stAlertContentSuccess"] *,
+[data-baseweb="notification"][kind="positive"] * {
+  color: #A7F3D0 !important; -webkit-text-fill-color: #A7F3D0 !important; fill: #A7F3D0 !important;
+}
+[data-testid="stAlertContentWarning"],
+[data-baseweb="notification"][kind="warning"] {
+  background-color: rgba(146,64,14,.30) !important;
+  border-color: rgba(253,230,138,.30) !important;
+}
+[data-testid="stAlertContentWarning"] *,
+[data-baseweb="notification"][kind="warning"] * {
+  color: #FDE68A !important; -webkit-text-fill-color: #FDE68A !important; fill: #FDE68A !important;
+}
+[data-testid="stAlertContentError"],
+[data-baseweb="notification"][kind="negative"] {
+  background-color: rgba(153,27,27,.28) !important;
+  border-color: rgba(254,202,202,.30) !important;
+}
+[data-testid="stAlertContentError"] *,
+[data-baseweb="notification"][kind="negative"] * {
+  color: #FECACA !important; -webkit-text-fill-color: #FECACA !important; fill: #FECACA !important;
+}
 </style>
 """
 
@@ -901,16 +1001,16 @@ with st.sidebar:
     )
     _level_to_search = {
         "Intern only": "intern",
-        "Entry-level only (0-2 yrs)": "entry level new grad junior associate",
-        "Intern + Entry-level (recommended)": "intern entry level new grad junior associate",
+        "Entry-level only (0-2 yrs)": "entry level",
+        "Intern + Entry-level (recommended)": "intern",
         "All levels": "",
     }
-    default_search = _level_to_search.get(experience_level, "intern entry level new grad junior associate")
+    default_search = _level_to_search.get(experience_level, "intern")
     search_text = st.text_input(
         "Role search keyword (optional override)",
         value=os.getenv("CAREERFIT_DEFAULT_SEARCH", default_search),
         placeholder="Examples: intern, data analyst, software engineer, product manager",
-        help="Optional keyword passed to supported ATS platforms. Leave as-is to use the experience-level preset above.",
+        help="Single keyword sent to ATS platforms. Most ATSes (Workday, Amazon, Microsoft) treat multi-word queries as exact phrases — keep this short. The experience-level filter is applied during ranking, not at search time.",
     )
     max_years_experience = st.slider(
         "Max years of experience required",
