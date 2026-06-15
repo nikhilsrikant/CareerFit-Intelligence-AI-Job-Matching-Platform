@@ -1429,6 +1429,103 @@ def render_profile_tab() -> None:
                 st.error(f"Failed to save profile: {exc}")
 
 
+def render_qa_section() -> None:
+    """Render the Q&A Answer Store section inside the Auto-Apply tab."""
+    try:
+        from careerfit import db as _db
+    except Exception:
+        st.error("Database module not available")
+        return
+
+    st.markdown("""
+        <div class='cf-section-header'>
+          <h2>&#x1F4AC; Q&A Answer Store</h2>
+          <p>Pre-enter answers to common application questions. The system auto-fills matching questions during applications.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Load F-1 Defaults button
+    F1_DEFAULTS = [
+        ("work authorization", "Yes"),
+        ("authorized to work", "Yes"),
+        ("require sponsorship", "Yes"),
+        ("visa sponsorship", "F-1 OPT — requires sponsorship"),
+        ("graduation", "2026"),
+        ("expected graduation", "May 2026"),
+        ("gpa", "3.8"),
+        ("us citizen", "No"),
+        ("permanent resident", "No"),
+        ("security clearance", "No"),
+        ("veteran", "I am not a protected veteran"),
+        ("disability", "No, I don't have a disability"),
+        ("gender", "Prefer not to say"),
+        ("ethnicity", "Prefer not to say"),
+        ("salary expectation", "Open to discussion"),
+        ("how did you hear", "LinkedIn"),
+        ("start date", "Immediately"),
+    ]
+
+    if st.button("&#x1F4CB; Load F-1 Student Defaults", key="load_f1_defaults_btn",
+                 help="Adds pre-configured answers for common F-1 student questions."):
+        existing_patterns = {qa["question_pattern"].lower() for qa in st.session_state.get("qa_answers", [])}
+        added = 0
+        for pattern, answer in F1_DEFAULTS:
+            if pattern.lower() not in existing_patterns:
+                _db.save_qa_answer(pattern, answer)
+                added += 1
+        st.session_state.qa_answers = _db.load_qa_answers()
+        if added:
+            st.success(f"Added {added} default Q&A answers.")
+        else:
+            st.info("All defaults already loaded.")
+        st.rerun()
+
+    # Display existing answers
+    qa_list = st.session_state.get("qa_answers", [])
+    if qa_list:
+        st.markdown(f"<div class='cf-muted' style='margin-bottom:12px'>{len(qa_list)} answer(s) configured</div>", unsafe_allow_html=True)
+        for qa in qa_list:
+            qa_id = qa.get("id")
+            q_pattern = qa.get("question_pattern", "")
+            answer = qa.get("answer", "")
+            qa_c1, qa_c2, qa_c3 = st.columns([3, 3, 1])
+            with qa_c1:
+                st.markdown(f"<div class='cf-muted' style='font-size:12px;padding:6px 0'><b>Pattern:</b> {escape(q_pattern[:80])}</div>", unsafe_allow_html=True)
+            with qa_c2:
+                st.markdown(f"<div class='cf-muted' style='font-size:12px;padding:6px 0'><b>Answer:</b> {escape(answer[:60])}</div>", unsafe_allow_html=True)
+            with qa_c3:
+                if st.button("&#x2715;", key=f"del_qa_{qa_id}", help="Delete this answer"):
+                    _db.delete_qa_answer(qa_id)
+                    st.session_state.qa_answers = _db.load_qa_answers()
+                    st.rerun()
+    else:
+        st.markdown("<div class='cf-alert cf-alert-info'>No Q&A answers configured yet. Click 'Load F-1 Student Defaults' to get started.</div>", unsafe_allow_html=True)
+
+    # Add new answer form
+    st.markdown("<div class='cf-card' style='margin-top:18px'>", unsafe_allow_html=True)
+    st.markdown("<h3>Add Custom Answer</h3>", unsafe_allow_html=True)
+    with st.form("add_qa_form", clear_on_submit=True):
+        new_pattern = st.text_input(
+            "Question pattern",
+            placeholder="e.g. 'require sponsorship', 'work authorization', 'graduation year'",
+            help="A keyword or phrase that will be matched against the question text on application forms.",
+        )
+        new_answer = st.text_area(
+            "Your answer",
+            placeholder="e.g. Yes, No, 2026, F-1 OPT, etc.",
+            height=80,
+        )
+        if st.form_submit_button("Add Answer", type="primary"):
+            if new_pattern and new_answer:
+                _db.save_qa_answer(new_pattern.strip(), new_answer.strip())
+                st.session_state.qa_answers = _db.load_qa_answers()
+                st.success("Answer added.")
+                st.rerun()
+            else:
+                st.error("Both question pattern and answer are required.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 # Sidebar controls only. Navigation has been removed.
 with st.sidebar:
     st.markdown(
@@ -1758,9 +1855,9 @@ elif st.session_state.active_tab == "profile":
 
 elif st.session_state.active_tab == "autoapply":
     st.markdown("""
-        <div class='cf-card'>
-          <h3>&#x1F680; Auto-Apply Center</h3>
-          <p class='cf-muted'>Configure your continuous auto-apply loop, manage your Q&A answers, and review application results. Save your profile first to enable auto-apply.</p>
+        <div class='cf-section-header'>
+          <h2>&#x1F680; Auto-Apply Center</h2>
+          <p>Configure your continuous auto-apply loop and manage Q&A answers for zero-interaction job applications.</p>
         </div>
     """, unsafe_allow_html=True)
     if not st.session_state.get("db_profile", {}).get("email"):
@@ -1768,6 +1865,7 @@ elif st.session_state.active_tab == "autoapply":
         if st.button("Go to Profile Setup", key="goto_profile_from_autoapply"):
             st.session_state.active_tab = "profile"
             st.rerun()
+    render_qa_section()
 
 # Insights and diagnostics remain on the same page, collapsed by default.
 with st.expander("Source health, analytics, and diagnostics", expanded=False):

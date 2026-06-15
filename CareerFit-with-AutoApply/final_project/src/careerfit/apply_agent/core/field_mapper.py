@@ -84,16 +84,35 @@ class FieldMapper:
         value = mapper.resolve("Current Job Title")
     """
 
-    def __init__(self, applicant_cfg: dict, runtime_profile=None):
+    def __init__(self, applicant_cfg: dict, runtime_profile=None, qa_answers: "list[dict] | None" = None):
         """
         applicant_cfg: loaded from applicant_profile.yaml
         runtime_profile: careerfit.source_intelligence.RuntimeProfile (optional but recommended)
+        qa_answers: list of dicts with 'question_pattern' and 'answer' keys
         """
         self._cfg = applicant_cfg
         self._profile = runtime_profile
+        self._qa_answers = qa_answers or []
         self._cache: dict[str, Optional[Any]] = {}
 
     # ── Public API ──────────────────────────────────────────────────────────
+
+    def resolve_qa(self, label: str) -> "Optional[Any]":
+        """Try to resolve a form label using the user's pre-entered Q&A answer bank."""
+        if not self._qa_answers:
+            return None
+        label_l = label.lower().strip()
+        for qa in self._qa_answers:
+            pattern = str(qa.get("question_pattern", "")).lower().strip()
+            if not pattern:
+                continue
+            # Forward match: pattern substring of label
+            if pattern in label_l:
+                return qa.get("answer", "")
+            # Reverse match: label substring of pattern
+            if label_l in pattern:
+                return qa.get("answer", "")
+        return None
 
     def resolve(self, label: str, field_type: str = "text") -> Optional[Any]:
         """
@@ -107,7 +126,12 @@ class FieldMapper:
             return self._cache[cache_key]
 
         profile_key = self._match_key(key_label)
-        value = self._get_value(profile_key, field_type) if profile_key else None
+        # Try Q&A answer bank first when it explicitly answers the question
+        qa_value = self.resolve_qa(key_label)
+        if qa_value is not None:
+            value = qa_value
+        else:
+            value = self._get_value(profile_key, field_type) if profile_key else None
         self._cache[cache_key] = value
         return value
 

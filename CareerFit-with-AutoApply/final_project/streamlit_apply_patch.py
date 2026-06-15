@@ -168,6 +168,7 @@ def run_apply_queue() -> None:
                 headless=st.session_state.apply_headless,
                 max_concurrent=st.session_state.apply_max_concurrent,
                 storage_state=DEFAULT_STORAGE_STATE,
+                qa_answers=st.session_state.get("qa_answers", []),
             )
             _eng.load_profile = _orig  # restore
 
