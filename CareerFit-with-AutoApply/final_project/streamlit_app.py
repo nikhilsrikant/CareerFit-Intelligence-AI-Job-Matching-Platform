@@ -25,6 +25,11 @@ if str(SRC) not in sys.path:
 import pandas as pd
 import streamlit as st
 
+try:
+    from careerfit import db as _careerfit_db
+except Exception:
+    _careerfit_db = None
+
 from careerfit.fetchers import (
     NormalizedJob,
     clear_fetch_cache,
@@ -43,7 +48,7 @@ from streamlit_apply_patch import (
 )
 
 APP_TITLE = "CareerFit Studio"
-DEFAULT_THRESHOLD = float(os.getenv("CAREERFIT_DEFAULT_THRESHOLD", "0.70"))
+DEFAULT_THRESHOLD = float(os.getenv("CAREERFIT_DEFAULT_THRESHOLD", "0.90"))
 RUNTIME_COMPANIES_PATH = ROOT / "data" / "runtime_companies.json"
 
 st.set_page_config(
@@ -91,6 +96,13 @@ CSS = r"""
   --shadow-lg: 0 8px 32px rgba(15,23,42,.10), 0 24px 56px rgba(15,23,42,.07);
   --shadow-blue: 0 8px 24px rgba(37,99,235,.22);
   --transition: 0.18s cubic-bezier(.4,0,.2,1);
+  --glass-bg: rgba(255,255,255,0.72);
+  --glass-border: rgba(255,255,255,0.25);
+  --glass-shadow: 0 8px 32px rgba(15,23,42,0.10);
+  --blur: blur(16px);
+  --ambient-1: rgba(37,99,235,0.09);
+  --ambient-2: rgba(6,182,212,0.07);
+  --ambient-3: rgba(16,185,129,0.06);
 }
 
 html, body { background: #F4F6FB !important; color: #0C1322 !important; }
@@ -106,8 +118,10 @@ html, body, [class*="css"], .stApp {
 
 .stApp {
   background-image:
-    radial-gradient(ellipse 80% 50% at 0% 0%, rgba(37,99,235,.07) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(6,182,212,.05) 0%, transparent 60%) !important;
+    radial-gradient(ellipse 80% 50% at 0% 0%, rgba(37,99,235,.09) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(6,182,212,.07) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 60% at 50% 0%, rgba(16,185,129,.05) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 80% 30%, rgba(124,58,237,.04) 0%, transparent 50%) !important;
 }
 
 section.main > div { padding-top: 0.75rem; }
@@ -302,7 +316,7 @@ section.main > div { padding-top: 0.75rem; }
 /* ════════════════════════════════════════════════════════════
    CARDS
    ════════════════════════════════════════════════════════════ */
-.cf-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 22px; padding: 24px; box-shadow: 0 4px 16px rgba(15,23,42,.08), 0 12px 32px rgba(15,23,42,.05); margin-bottom: 18px; }
+.cf-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 22px; padding: 24px; box-shadow: 0 4px 16px rgba(15,23,42,.08), 0 12px 32px rgba(15,23,42,.05); margin-bottom: 18px; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); background: var(--glass-bg); }
 .cf-card h3, .cf-section-title { font-size: 16px; margin: 0 0 8px; color: #0C1322; font-weight: 700; letter-spacing: -.025em; }
 .cf-muted { color: #64748B; font-size: 13.5px; line-height: 1.65; }
 
@@ -328,7 +342,7 @@ section.main > div { padding-top: 0.75rem; }
 .cf-step-desc { font-size:12px; color:#64748B; line-height:1.5; margin-top:4px; }
 
 /* JOB CARDS */
-.cf-job { border-radius: 28px; background: #FFFFFF; border: 1px solid #E2E8F0; padding: 22px 24px; margin-bottom:14px; box-shadow: 0 1px 4px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); transition: box-shadow .18s, border-color .18s, transform .18s; }
+.cf-job { border-radius: 28px; background: #FFFFFF; border: 1px solid #E2E8F0; padding: 22px 24px; margin-bottom:14px; box-shadow: 0 1px 4px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.04); transition: box-shadow .18s, border-color .18s, transform .18s; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
 .cf-job:hover { box-shadow: 0 4px 16px rgba(15,23,42,.08); border-color: #BFDBFE; transform: translateY(-1px); }
 .cf-job-top { display:flex; gap:16px; align-items:flex-start; justify-content:space-between; }
 .cf-company { display:flex; gap:14px; align-items:flex-start; }
@@ -448,6 +462,126 @@ section.main > div { padding-top: 0.75rem; }
 /* RESPONSIVE */
 @media (max-width: 1180px) { .cf-grid, .cf-command-steps { grid-template-columns:1fr 1fr; } .cf-quick-grid, .cf-source-grid { grid-template-columns:1fr; } }
 @media (max-width: 760px) { .block-container { padding-left:1rem; padding-right:1rem; } .cf-grid, .cf-command-steps { grid-template-columns:1fr; } .cf-hero { padding:24px; border-radius:22px; } .cf-job-top { flex-direction:column; } }
+
+/* ════════════════════════════════════════════════════════════
+   GLASS MORPHISM
+   ════════════════════════════════════════════════════════════ */
+.cf-glass {
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+}
+.cf-glass-dark {
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  background: rgba(8,16,30,0.65);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-lg);
+}
+
+/* ════════════════════════════════════════════════════════════
+   SECTION HEADER
+   ════════════════════════════════════════════════════════════ */
+.cf-section-header {
+  position: relative;
+  padding: 28px 32px;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, #0A1628 0%, #162040 50%, #0C3254 100%);
+  color: #fff;
+  margin: 28px 0 20px;
+  overflow: hidden;
+}
+.cf-section-header:before {
+  content: "";
+  position: absolute;
+  top: -40px; right: -20px;
+  width: 200px; height: 200px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(59,130,246,.25) 0%, transparent 65%);
+  pointer-events: none;
+}
+.cf-section-header h2 {
+  margin: 0 0 6px; font-size: 22px; font-weight: 800;
+  letter-spacing: -.04em; color: #fff;
+  position: relative; z-index: 1;
+}
+.cf-section-header p {
+  margin: 0; color: #93C5FD; font-size: 14px;
+  position: relative; z-index: 1;
+}
+
+/* ════════════════════════════════════════════════════════════
+   TAB BUTTON ROW
+   ════════════════════════════════════════════════════════════ */
+.cf-tab-btn-row {
+  display: flex; gap: 10px; margin: 20px 0 24px; flex-wrap: wrap;
+}
+
+/* ════════════════════════════════════════════════════════════
+   STATUS BADGES
+   ════════════════════════════════════════════════════════════ */
+.cf-badge-applied {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 12px; border-radius: 999px;
+  background: #ECFDF5; color: #047857;
+  border: 1px solid #A7F3D0;
+  font-size: 12px; font-weight: 700;
+}
+.cf-badge-f1-ok {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 12px; border-radius: 999px;
+  background: #EFF6FF; color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+  font-size: 12px; font-weight: 700;
+}
+.cf-badge-f1-skip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 12px; border-radius: 999px;
+  background: #FEF2F2; color: #991B1B;
+  border: 1px solid #FECACA;
+  font-size: 12px; font-weight: 700;
+}
+
+/* ════════════════════════════════════════════════════════════
+   PROFILE SECTION CARD
+   ════════════════════════════════════════════════════════════ */
+.cf-profile-section {
+  background: var(--glass-bg);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 22px 24px;
+  margin-bottom: 18px;
+  box-shadow: var(--glass-shadow);
+}
+.cf-profile-section h4 {
+  margin: 0 0 16px; font-size: 14px; font-weight: 700;
+  color: var(--blue); text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+/* ════════════════════════════════════════════════════════════
+   HERO EXTRA ORB
+   ════════════════════════════════════════════════════════════ */
+.cf-hero-orb-left {
+  position: absolute; bottom: -30px; left: 40px;
+  width: 180px; height: 180px; border-radius: 999px;
+  background: radial-gradient(circle, rgba(16,185,129,.18) 0%, transparent 65%);
+  pointer-events: none;
+}
+
+/* ════════════════════════════════════════════════════════════
+   AMBIENT ANIMATION
+   ════════════════════════════════════════════════════════════ */
+@keyframes ambient-shift {
+  from { opacity: 0.85; }
+  to { opacity: 1; }
+}
+.cf-hero { animation: ambient-shift 8s ease-in-out infinite alternate; }
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -633,6 +767,21 @@ h1, h2, h3, h4, h5, h6 { color: #F8FAFC !important; }
 [data-baseweb="notification"][kind="negative"] * {
   color: #FECACA !important; -webkit-text-fill-color: #FECACA !important; fill: #FECACA !important;
 }
+
+/* ════════════════════════════════════════════════════════════
+   DARK MODE — glass overrides
+   ════════════════════════════════════════════════════════════ */
+.cf-glass, .cf-card, .cf-job, .cf-command {
+  background: rgba(19,28,47,0.82) !important;
+  border-color: rgba(148,163,184,.15) !important;
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+}
+.cf-profile-section {
+  background: rgba(14,23,38,0.75) !important;
+  border-color: rgba(148,163,184,.12) !important;
+}
+.cf-section-header { /* already dark, no change needed */ }
 </style>
 """
 
@@ -652,10 +801,29 @@ def init_state() -> None:
         "profile_url_blob": "",
         "company_name_input": "",
         "company_url_input": "",
+        "active_tab": "profile",
+        "applied_job_ids": set(),
+        "qa_answers": [],
+        "db_profile": {},
+        "profile_form_draft": {},
+        "_db_loaded": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+    # Load DB-backed state if not already loaded
+    try:
+        from careerfit import db as _db
+        if not st.session_state.get("_db_loaded"):
+            _prof = _db.load_profile()
+            if _prof:
+                st.session_state.db_profile = _prof
+                st.session_state.active_tab = "matching"
+            st.session_state.applied_job_ids = _db.get_applied_job_ids()
+            st.session_state.qa_answers = _db.load_qa_answers()
+            st.session_state["_db_loaded"] = True
+    except Exception:
+        pass
 
 
 def log(message: str) -> None:
@@ -783,7 +951,7 @@ def render_role_suggestions(profile: RuntimeProfile) -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-def render_match_card(m: JobMatch, threshold: float) -> None:
+def render_match_card(m: JobMatch, threshold: float, applied_job_ids: "set[str] | None" = None) -> None:
     score = pct(m.score)
     widths = min(100, max(2, score))
     strengths = "".join(f"<span class='cf-tag cf-tag-green'>{escape(s)}</span>" for s in m.matched_strengths[:5])
@@ -822,7 +990,24 @@ def render_match_card(m: JobMatch, threshold: float) -> None:
         """,
         unsafe_allow_html=True,
     )
-    render_apply_button(m)
+    # Applied badge
+    _job_id = m.raw_job.get("external_job_id","") or ""
+    _already = applied_job_ids and (m.canonical_url in applied_job_ids or _job_id in applied_job_ids)
+    _f1_friendly = m.raw_job.get("f1_friendly", False)
+    _f1_blocked = m.raw_job.get("f1_blocked", False)
+    _badges = ""
+    if _already:
+        _badges += "<span class='cf-badge-applied'>&#x2713; Already Applied</span> "
+    if _f1_friendly:
+        _badges += "<span class='cf-badge-f1-ok'>&#x1F7E2; F-1 Friendly</span> "
+    if _f1_blocked:
+        _badges += "<span class='cf-badge-f1-skip'>&#x1F534; Clearance/No Sponsor</span> "
+    if _badges:
+        st.markdown(f"<div style='margin-top:8px'>{_badges}</div>", unsafe_allow_html=True)
+    if not _already:
+        render_apply_button(m)
+    else:
+        st.markdown("<span style='font-size:12px;color:#10B981;font-weight:700'>&#x2713; Already applied</span>", unsafe_allow_html=True)
 
 
 def selected_companies_for_run(scan_all_companies: bool, company_limit: int) -> list[dict]:
@@ -985,6 +1170,235 @@ def add_company_action(name: str, url: str, default_search: str, location_mode: 
     log(f"Added company: {detected['name']} ({ats.get('type', 'auto')})")
 
 
+def render_profile_tab() -> None:
+    """Render the Personal Profile Setup tab with resume parsing and all profile fields."""
+    from pathlib import Path
+    try:
+        from careerfit import db as _db
+    except Exception:
+        st.error("Database module not available")
+        return
+
+    prof = st.session_state.get("profile_form_draft") or st.session_state.get("db_profile") or {}
+
+    st.markdown("""
+        <div class='cf-section-header'>
+          <h2>&#x1F464; Personal Profile Setup</h2>
+          <p>Fill in your details once &mdash; the system uses them to apply automatically on your behalf.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # ── Resume Upload & Parse ──────────────────────────────────────────────
+    st.markdown("<div class='cf-profile-section'><h4>&#x1F4C4; Upload Resume to Auto-Fill</h4>", unsafe_allow_html=True)
+    resume_file = st.file_uploader(
+        "Upload resume (PDF, DOCX, or TXT)",
+        type=["pdf", "docx", "txt"],
+        key="profile_resume_upload",
+        help="CareerFit will extract name, email, phone, education, and skills automatically.",
+    )
+    if resume_file:
+        try:
+            from careerfit.resume_parser import parse_resume, merge_parsed_into_profile
+            parsed = parse_resume(resume_file.getvalue(), resume_file.name)
+            merged = merge_parsed_into_profile(parsed, prof)
+            st.session_state.profile_form_draft = merged
+            prof = merged
+            # Save resume file to disk
+            resume_save_path = ROOT / "data" / resume_file.name
+            resume_save_path.parent.mkdir(parents=True, exist_ok=True)
+            resume_save_path.write_bytes(resume_file.getvalue())
+            st.session_state.profile_form_draft["resume_path"] = str(resume_save_path)
+            st.success(f"Resume parsed from {resume_file.name} — fields pre-filled below. Review and save.")
+        except ImportError:
+            st.info("Resume parser module not yet available. Fill fields manually.")
+        except Exception as exc:
+            st.warning(f"Could not fully parse resume: {exc}. Fill remaining fields manually.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Personal Information ───────────────────────────────────────────────
+    st.markdown("<div class='cf-profile-section'><h4>&#x1F9D1; Personal Information</h4>", unsafe_allow_html=True)
+    pi1, pi2 = st.columns(2)
+    with pi1:
+        first_name = st.text_input("First Name *", value=prof.get("first_name",""), key="pf_first_name")
+    with pi2:
+        last_name = st.text_input("Last Name *", value=prof.get("last_name",""), key="pf_last_name")
+    pi3, pi4 = st.columns(2)
+    with pi3:
+        email = st.text_input("Email *", value=prof.get("email",""), key="pf_email")
+    with pi4:
+        phone = st.text_input("Phone", value=prof.get("phone",""), placeholder="+1 (555) 000-0000", key="pf_phone")
+    address = st.text_input("Street Address", value=prof.get("address",""), key="pf_address")
+    ci1, ci2, ci3 = st.columns([2,1,1])
+    with ci1:
+        city = st.text_input("City", value=prof.get("city",""), key="pf_city")
+    with ci2:
+        state = st.text_input("State", value=prof.get("state",""), placeholder="CA", key="pf_state")
+    with ci3:
+        zip_code = st.text_input("ZIP", value=prof.get("zip_code",""), key="pf_zip")
+    country = st.text_input("Country", value=prof.get("country","United States"), key="pf_country")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Professional Links ────────────────────────────────────────────────
+    st.markdown("<div class='cf-profile-section'><h4>&#x1F517; Professional Links</h4>", unsafe_allow_html=True)
+    lk1, lk2, lk3 = st.columns(3)
+    with lk1:
+        linkedin_url = st.text_input("LinkedIn URL", value=prof.get("linkedin_url",""), placeholder="https://linkedin.com/in/yourname", key="pf_linkedin")
+    with lk2:
+        github_url = st.text_input("GitHub URL", value=prof.get("github_url",""), placeholder="https://github.com/yourname", key="pf_github")
+    with lk3:
+        portfolio_url = st.text_input("Portfolio / Website", value=prof.get("portfolio_url",""), key="pf_portfolio")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Education ─────────────────────────────────────────────────────────
+    st.markdown("<div class='cf-profile-section'><h4>&#x1F393; Education</h4>", unsafe_allow_html=True)
+    ed1, ed2 = st.columns(2)
+    with ed1:
+        university = st.text_input("University / College", value=prof.get("university",""), key="pf_university")
+    with ed2:
+        degree = st.text_input("Degree & Major", value=prof.get("degree",""), placeholder="B.S. Computer Science", key="pf_degree")
+    ed3, ed4 = st.columns(2)
+    with ed3:
+        try:
+            _gy_default = int(prof.get("graduation_year") or 2026)
+        except (ValueError, TypeError):
+            _gy_default = 2026
+        graduation_year = st.number_input("Expected Graduation Year", min_value=2024, max_value=2030, value=_gy_default, step=1, key="pf_grad_year")
+    with ed4:
+        try:
+            _gpa_default = float(prof.get("gpa") or 0.0)
+        except (ValueError, TypeError):
+            _gpa_default = 0.0
+        gpa = st.number_input("GPA (0.0-4.0)", min_value=0.0, max_value=4.0, value=_gpa_default, step=0.01, format="%.2f", key="pf_gpa")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Visa & Work Authorization ──────────────────────────────────────────
+    st.markdown("<div class='cf-profile-section'><h4>&#x1F6C2; Visa & Work Authorization</h4>", unsafe_allow_html=True)
+    vs1, vs2 = st.columns(2)
+    _visa_options = ["F-1/OPT", "F-1/CPT", "H-1B", "Green Card", "US Citizen", "Other"]
+    _visa_default = prof.get("visa_status", "F-1/OPT")
+    _visa_idx = _visa_options.index(_visa_default) if _visa_default in _visa_options else 0
+    with vs1:
+        visa_status = st.selectbox("Visa Status", _visa_options, index=_visa_idx, key="pf_visa")
+    with vs2:
+        _spon_options = ["Yes", "No"]
+        _spon_default = prof.get("requires_sponsorship", "Yes")
+        _spon_idx = _spon_options.index(_spon_default) if _spon_default in _spon_options else 0
+        requires_sponsorship = st.selectbox("Will you require visa sponsorship?", _spon_options, index=_spon_idx, key="pf_sponsorship")
+    # Auto-set work authorization based on visa status
+    work_authorization = "Yes" if visa_status in ("F-1/OPT", "F-1/CPT") else prof.get("work_authorization", "Yes")
+    st.caption(f"Work authorization: **{work_authorization}** (auto-set based on visa status)")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Target Roles ──────────────────────────────────────────────────────
+    st.markdown("<div class='cf-profile-section'><h4>&#x1F3AF; Target Roles & Experience</h4>", unsafe_allow_html=True)
+    _tr_val = prof.get("target_roles","")
+    if isinstance(_tr_val, list):
+        _tr_val = "\n".join(_tr_val)
+    target_roles_text = st.text_area(
+        "Target role titles (one per line)",
+        value=_tr_val,
+        height=100,
+        placeholder="Software Engineer Intern\nData Science Intern\nMachine Learning Engineer",
+        key="pf_target_roles",
+        help="These are used for role-matching. Add the exact job titles you are targeting.",
+    )
+    tr1, tr2 = st.columns(2)
+    with tr1:
+        try:
+            _ye_default = int(prof.get("years_experience") or 0)
+        except (ValueError, TypeError):
+            _ye_default = 0
+        years_experience = st.slider("Years of relevant experience", 0, 5, _ye_default, key="pf_years_exp")
+    with tr2:
+        available_start_date = st.text_input("Available start date", value=prof.get("available_start_date","Immediately"), key="pf_start_date")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Application Preferences ───────────────────────────────────────────
+    st.markdown("<div class='cf-profile-section'><h4>&#x2699;&#xFE0F; Application Preferences</h4>", unsafe_allow_html=True)
+    ap1, ap2 = st.columns(2)
+    with ap1:
+        salary_expectation = st.text_input("Salary expectation (optional)", value=prof.get("salary_expectation",""), placeholder="e.g. $25/hr or $80,000/yr", key="pf_salary")
+    with ap2:
+        referral_source = st.text_input("How did you hear about roles?", value=prof.get("referral_source","LinkedIn"), key="pf_referral")
+    cover_letter_text = st.text_area(
+        "Cover letter template (optional)",
+        value=prof.get("cover_letter_text",""),
+        height=140,
+        placeholder="Dear Hiring Team,\n\nI am excited to apply for the {job_title} role at {company}...\n\nBest regards,\n{first_name}",
+        key="pf_cover_letter",
+        help="Use {job_title}, {company}, {first_name}, {skills} as placeholders.",
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Platform Credentials ──────────────────────────────────────────────
+    st.markdown("<div class='cf-profile-section'><h4>&#x1F511; Platform Login Credentials</h4>", unsafe_allow_html=True)
+    st.markdown("<p class='cf-muted'>Credentials are stored locally in the SQLite database on your machine. They are never sent to any server.</p>", unsafe_allow_html=True)
+    _platforms = ["Workday", "Greenhouse", "Ashby", "Lever", "SmartRecruiters"]
+    _existing_platforms = prof.get("platforms") or {}
+    if isinstance(_existing_platforms, str):
+        try:
+            import json as _json; _existing_platforms = _json.loads(_existing_platforms)
+        except Exception:
+            _existing_platforms = {}
+    platform_creds = {}
+    for _plat in _platforms:
+        _plat_key = _plat.lower()
+        _existing = _existing_platforms.get(_plat_key, {})
+        pc1, pc2 = st.columns(2)
+        with pc1:
+            _pe = st.text_input(f"{_plat} Email", value=_existing.get("email",""), key=f"pf_plat_email_{_plat_key}")
+        with pc2:
+            _pp = st.text_input(f"{_plat} Password", value=_existing.get("password",""), type="password", key=f"pf_plat_pass_{_plat_key}")
+        if _pe or _pp:
+            platform_creds[_plat_key] = {"email": _pe, "password": _pp}
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Save Button ───────────────────────────────────────────────────────
+    sv1, sv2 = st.columns([1,2])
+    with sv1:
+        save_clicked = st.button("&#x1F4BE; Save Profile", type="primary", use_container_width=True, key="save_profile_btn")
+    with sv2:
+        st.markdown("<p class='cf-muted' style='padding-top:8px'>Your profile is saved locally and used for all future job applications.</p>", unsafe_allow_html=True)
+
+    if save_clicked:
+        if not email or not first_name:
+            st.error("First name and email are required.")
+        else:
+            _target_roles_list = [r.strip() for r in target_roles_text.splitlines() if r.strip()]
+            profile_data = {
+                "first_name": first_name, "last_name": last_name,
+                "email": email, "phone": phone,
+                "address": address, "city": city, "state": state,
+                "zip_code": zip_code, "country": country,
+                "linkedin_url": linkedin_url, "github_url": github_url,
+                "portfolio_url": portfolio_url,
+                "visa_status": visa_status,
+                "graduation_year": int(graduation_year),
+                "gpa": float(gpa),
+                "university": university, "degree": degree,
+                "target_roles": _target_roles_list,
+                "years_experience": int(years_experience),
+                "available_start_date": available_start_date,
+                "salary_expectation": salary_expectation,
+                "work_authorization": work_authorization,
+                "requires_sponsorship": requires_sponsorship,
+                "referral_source": referral_source,
+                "cover_letter_text": cover_letter_text,
+                "resume_path": prof.get("resume_path",""),
+                "platforms": platform_creds,
+            }
+            try:
+                _db.save_profile(profile_data)
+                st.session_state.db_profile = profile_data
+                st.session_state.profile_form_draft = profile_data
+                st.session_state["_db_loaded"] = False  # force reload on next render
+                st.success("Profile saved successfully! Switching to Job Matching tab.")
+                st.session_state.active_tab = "matching"
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Failed to save profile: {exc}")
+
+
 # Sidebar controls only. Navigation has been removed.
 with st.sidebar:
     st.markdown(
@@ -1049,7 +1463,7 @@ st.markdown(
     """
     <div class='cf-hero'>
       <div class='cf-hero-content'>
-        <div class='cf-eyebrow'>CareerFit Intelligence Platform</div>
+        <div class='cf-eyebrow'>Intelligent Job Matching &middot; F-1 Student Edition</div>
         <h1>Personalized job matching for resumes, portfolios, and company career sources.</h1>
         <p>Designed for multi-user career discovery: each user can provide profile websites, upload career documents, add employer career pages, and run an end-to-end matching workflow from a single workspace.</p>
         <div class='cf-toolbar'>
@@ -1064,180 +1478,256 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Status metrics
-high_count = len([m for m in st.session_state.matches if m.score >= threshold])
-profile_ready = bool(st.session_state.profile.combined_text.strip())
-st.markdown("<div class='cf-grid'>", unsafe_allow_html=True)
-mc = st.columns(4)
-with mc[0]:
-    render_metric("Candidate profile", "Ready" if profile_ready else "Not built", f"{len(st.session_state.profile.combined_text):,} chars")
-with mc[1]:
-    render_metric("Career sources", str(len(all_companies())), "available sources")
-with mc[2]:
-    render_metric("Ranked roles", str(len(st.session_state.matches)), "latest run")
-with mc[3]:
-    render_metric(f"High-fit matches ≥ {pct(threshold)}%", str(high_count), st.session_state.last_scan_label)
-st.markdown("</div>", unsafe_allow_html=True)
+# Tab navigation
+tab_cols = st.columns([1, 1, 1])
+with tab_cols[0]:
+    if st.button("&#x1F464; Profile Setup", use_container_width=True,
+                 type="primary" if st.session_state.active_tab == "profile" else "secondary",
+                 key="tab_profile"):
+        st.session_state.active_tab = "profile"
+        st.rerun()
+with tab_cols[1]:
+    if st.button("&#x1F50D; Job Matching", use_container_width=True,
+                 type="primary" if st.session_state.active_tab == "matching" else "secondary",
+                 key="tab_matching"):
+        st.session_state.active_tab = "matching"
+        st.rerun()
+with tab_cols[2]:
+    if st.button("&#x1F680; Auto-Apply", use_container_width=True,
+                 type="primary" if st.session_state.active_tab == "autoapply" else "secondary",
+                 key="tab_autoapply"):
+        st.session_state.active_tab = "autoapply"
+        st.rerun()
+st.markdown("<hr style='border:none;border-top:1px solid #E2E8F0;margin:4px 0 20px'>", unsafe_allow_html=True)
 
-# Input + command area
-st.markdown("<div class='cf-subtitle'>Unified matching workspace</div>", unsafe_allow_html=True)
-left, right = st.columns([1.05, .95])
-with left:
-    st.markdown("<div class='cf-card'><h3>1. Candidate profile inputs</h3><p class='cf-muted'>Add public profile pages and upload career documents. CareerFit uses these sources to infer skills, experience signals, role targets, and domain preferences for the current user session.</p>", unsafe_allow_html=True)
-    default_url_text = st.session_state.get("profile_url_blob") or ""
-    url_blob = st.text_area(
-        "Public profile or portfolio URLs",
-        value=default_url_text,
-        placeholder="https://your-portfolio.com\nhttps://github.com/your-username\nhttps://your-personal-site.com",
-        height=116,
-        help="Use publicly readable pages only. Private or login-protected pages may not be accessible.",
-    )
-    st.caption("Tip: add a portfolio, GitHub profile, personal website, project page, or public profile export URL.")
-    st.session_state.profile_url_blob = url_blob
-    max_docs = int(os.getenv("CAREERFIT_MAX_PROFILE_DOCS", "20"))
-    uploaded = st.file_uploader(f"Career documents (PDF or DOCX, up to {max_docs})", type=["pdf", "docx"], accept_multiple_files=True, help="Upload resumes, CVs, transcripts, portfolio exports, or role-specific documents. Text-readable PDF and real DOCX files work best.")
-    if uploaded and len(uploaded) > max_docs:
-        st.warning(f"Only the first {max_docs} files will be processed.")
+if st.session_state.active_tab == "matching":
+    # Status metrics
+    high_count = len([m for m in st.session_state.matches if m.score >= threshold])
+    profile_ready = bool(st.session_state.profile.combined_text.strip())
+    st.markdown("<div class='cf-grid'>", unsafe_allow_html=True)
+    mc = st.columns(4)
+    with mc[0]:
+        render_metric("Candidate profile", "Ready" if profile_ready else "Not built", f"{len(st.session_state.profile.combined_text):,} chars")
+    with mc[1]:
+        render_metric("Career sources", str(len(all_companies())), "available sources")
+    with mc[2]:
+        render_metric("Ranked roles", str(len(st.session_state.matches)), "latest run")
+    with mc[3]:
+        render_metric(f"High-fit matches >= {pct(threshold)}%", str(high_count), st.session_state.last_scan_label)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='cf-card'><h3>2. Career sources</h3><p class='cf-muted'>Add public employer career pages or ATS job-board URLs. CareerFit attempts to detect the platform and select the appropriate connector automatically.</p>", unsafe_allow_html=True)
-    with st.form("add_company_form", clear_on_submit=False):
-        c1, c2 = st.columns([.35, .65])
-        with c1:
-            company_name = st.text_input("Employer name", placeholder="Example: Amazon, Microsoft, NVIDIA, Tesla")
-        with c2:
-            company_url = st.text_input("Public careers URL", placeholder="Paste the company careers page or ATS job-board URL")
-        default_search = st.text_input("Default role keyword for this employer", value=search_text or "intern", placeholder="Examples: intern, software engineer, marketing analyst")
-        f1, f2 = st.columns([.4, .6])
-        with f1:
-            preview = st.form_submit_button("Preview detected connector")
-        with f2:
-            add = st.form_submit_button("Add employer source", type="primary")
-    if preview and company_url:
-        detected = detect_career_source(company_name or "Company", company_url, default_search)
-        ats = detected.get("ats") or {}
-        st.markdown(f"<div class='cf-alert cf-alert-success'>Detected connector: {platform_badge(ats.get('type','auto'))}</div>", unsafe_allow_html=True)
-        st.json(detected)
-    if add:
-        add_company_action(company_name, company_url, default_search, location_mode, include_unknown_locations)
-    sources = all_companies()
-    if sources:
-        rows = []
-        for c in sources:
-            try:
-                expanded = expand_company_sources(c)
-                platforms = ", ".join(sorted({(x.get("ats") or {}).get("type", "custom") for x in expanded}))
-            except Exception:
-                platforms = (c.get("ats") or {}).get("type", "custom")
-            rows.append({"Company": c.get("name"), "Connector(s)": platforms, "URL": c.get("careers_url")})
-        # Use HTML table instead of st.dataframe to avoid canvas dark-mode rendering
-        tbl_rows = "".join(
-            f"<tr><td style='padding:8px 12px;border-bottom:1px solid #E2E8F0;color:#0B1220;font-size:13px'>{r['Company']}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid #E2E8F0;color:#0B1220;font-size:13px'>{r['Connector(s)']}</td>"
-            f"<td style='padding:8px 12px;border-bottom:1px solid #E2E8F0;color:#475569;font-size:12px;word-break:break-all'>{r['URL']}</td></tr>"
-            for r in rows
+    # Input + command area
+    st.markdown("<div class='cf-subtitle'>Unified matching workspace</div>", unsafe_allow_html=True)
+    left, right = st.columns([1.05, .95])
+    with left:
+        st.markdown("<div class='cf-card'><h3>1. Candidate profile inputs</h3><p class='cf-muted'>Add public profile pages and upload career documents. CareerFit uses these sources to infer skills, experience signals, role targets, and domain preferences for the current user session.</p>", unsafe_allow_html=True)
+        default_url_text = st.session_state.get("profile_url_blob") or ""
+        url_blob = st.text_area(
+            "Public profile or portfolio URLs",
+            value=default_url_text,
+            placeholder="https://your-portfolio.com\nhttps://github.com/your-username\nhttps://your-personal-site.com",
+            height=116,
+            help="Use publicly readable pages only. Private or login-protected pages may not be accessible.",
         )
-        st.markdown(
-            f"<table style='width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #E2E8F0'>"
-            f"<thead><tr>"
-            f"<th style='padding:10px 12px;background:#F1F5F9;color:#334155;font-size:12px;text-align:left;font-weight:700'>Company</th>"
-            f"<th style='padding:10px 12px;background:#F1F5F9;color:#334155;font-size:12px;text-align:left;font-weight:700'>Connector(s)</th>"
-            f"<th style='padding:10px 12px;background:#F1F5F9;color:#334155;font-size:12px;text-align:left;font-weight:700'>URL</th>"
-            f"</tr></thead><tbody>{tbl_rows}</tbody></table>",
-            unsafe_allow_html=True
-        )
-    cc1, cc2 = st.columns(2)
-    with cc1:
-        if st.button("Clear manually added employer sources", use_container_width=True):
-            st.session_state.user_companies = []
-            save_persisted_companies([])
-            st.success("Manually added employer sources were cleared. Default configured sources remain available.")
-    with cc2:
-        st.caption("Employer sources added here are saved locally for future sessions.")
-    st.markdown("</div>", unsafe_allow_html=True)
+        st.caption("Tip: add a portfolio, GitHub profile, personal website, project page, or public profile export URL.")
+        st.session_state.profile_url_blob = url_blob
+        max_docs = int(os.getenv("CAREERFIT_MAX_PROFILE_DOCS", "20"))
+        uploaded = st.file_uploader(f"Career documents (PDF or DOCX, up to {max_docs})", type=["pdf", "docx"], accept_multiple_files=True, help="Upload resumes, CVs, transcripts, portfolio exports, or role-specific documents. Text-readable PDF and real DOCX files work best.")
+        if uploaded and len(uploaded) > max_docs:
+            st.warning(f"Only the first {max_docs} files will be processed.")
+        st.markdown("</div>", unsafe_allow_html=True)
 
-with right:
-    st.markdown("<div class='cf-command'><div class='cf-command-title'>3. Matching workflow</div><p class='cf-muted'>Run the complete matching pipeline for the current user: extract profile signals, retrieve open roles from employer sources, apply location preferences, score relevance, and refresh the ranked results below.</p>", unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class='cf-command-steps'>
-          <div class='cf-step'><div class='cf-step-num'>1</div><div class='cf-step-title'>Extract</div><div class='cf-step-desc'>Parse resumes, CVs, portfolios, and public profile pages.</div></div>
-          <div class='cf-step'><div class='cf-step-num'>2</div><div class='cf-step-title'>Fetch</div><div class='cf-step-desc'>Detect ATS platforms and retrieve open roles.</div></div>
-          <div class='cf-step'><div class='cf-step-num'>3</div><div class='cf-step-title'>Rank</div><div class='cf-step-desc'>Score roles against skills, keywords, experience, and role targets.</div></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
-    b1, b2 = st.columns([.58, .42])
-    with b1:
-        run_all = st.button("Run full match analysis", type="primary", use_container_width=True)
-    with b2:
-        run_scan = st.button("Scan with current profile", use_container_width=True)
-    b3, b4 = st.columns([.5, .5])
-    with b3:
-        build_only = st.button("Analyze profile only", use_container_width=True)
-    with b4:
-        export_ready = bool(st.session_state.matches)
-        if export_ready:
-            st.download_button(
-                "Export matches CSV",
-                matches_dataframe(st.session_state.matches).to_csv(index=False).encode("utf-8"),
-                "careerfit_matches.csv",
-                "text/csv",
-                use_container_width=True,
+        st.markdown("<div class='cf-card'><h3>2. Career sources</h3><p class='cf-muted'>Add public employer career pages or ATS job-board URLs. CareerFit attempts to detect the platform and select the appropriate connector automatically.</p>", unsafe_allow_html=True)
+        with st.form("add_company_form", clear_on_submit=False):
+            c1, c2 = st.columns([.35, .65])
+            with c1:
+                company_name = st.text_input("Employer name", placeholder="Example: Amazon, Microsoft, NVIDIA, Tesla")
+            with c2:
+                company_url = st.text_input("Public careers URL", placeholder="Paste the company careers page or ATS job-board URL")
+            default_search = st.text_input("Default role keyword for this employer", value=search_text or "intern", placeholder="Examples: intern, software engineer, marketing analyst")
+            f1, f2 = st.columns([.4, .6])
+            with f1:
+                preview = st.form_submit_button("Preview detected connector")
+            with f2:
+                add = st.form_submit_button("Add employer source", type="primary")
+        if preview and company_url:
+            detected = detect_career_source(company_name or "Company", company_url, default_search)
+            ats = detected.get("ats") or {}
+            st.markdown(f"<div class='cf-alert cf-alert-success'>Detected connector: {platform_badge(ats.get('type','auto'))}</div>", unsafe_allow_html=True)
+            st.json(detected)
+        if add:
+            add_company_action(company_name, company_url, default_search, location_mode, include_unknown_locations)
+        sources = all_companies()
+        if sources:
+            rows = []
+            for c in sources:
+                try:
+                    expanded = expand_company_sources(c)
+                    platforms = ", ".join(sorted({(x.get("ats") or {}).get("type", "custom") for x in expanded}))
+                except Exception:
+                    platforms = (c.get("ats") or {}).get("type", "custom")
+                rows.append({"Company": c.get("name"), "Connector(s)": platforms, "URL": c.get("careers_url")})
+            # Use HTML table instead of st.dataframe to avoid canvas dark-mode rendering
+            tbl_rows = "".join(
+                f"<tr><td style='padding:8px 12px;border-bottom:1px solid #E2E8F0;color:#0B1220;font-size:13px'>{r['Company']}</td>"
+                f"<td style='padding:8px 12px;border-bottom:1px solid #E2E8F0;color:#0B1220;font-size:13px'>{r['Connector(s)']}</td>"
+                f"<td style='padding:8px 12px;border-bottom:1px solid #E2E8F0;color:#475569;font-size:12px;word-break:break-all'>{r['URL']}</td></tr>"
+                for r in rows
             )
-        else:
-            st.button("Export matches CSV", disabled=True, use_container_width=True)
+            st.markdown(
+                f"<table style='width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #E2E8F0'>"
+                f"<thead><tr>"
+                f"<th style='padding:10px 12px;background:#F1F5F9;color:#334155;font-size:12px;text-align:left;font-weight:700'>Company</th>"
+                f"<th style='padding:10px 12px;background:#F1F5F9;color:#334155;font-size:12px;text-align:left;font-weight:700'>Connector(s)</th>"
+                f"<th style='padding:10px 12px;background:#F1F5F9;color:#334155;font-size:12px;text-align:left;font-weight:700'>URL</th>"
+                f"</tr></thead><tbody>{tbl_rows}</tbody></table>",
+                unsafe_allow_html=True
+            )
+        cc1, cc2 = st.columns(2)
+        with cc1:
+            if st.button("Clear manually added employer sources", use_container_width=True):
+                st.session_state.user_companies = []
+                save_persisted_companies([])
+                st.success("Manually added employer sources were cleared. Default configured sources remain available.")
+        with cc2:
+            st.caption("Employer sources added here are saved locally for future sessions.")
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    if run_all:
-        ok = build_profile_action(url_blob, uploaded)
-        if ok or allow_unprofiled_scan:
+    with right:
+        st.markdown("<div class='cf-command'><div class='cf-command-title'>3. Matching workflow</div><p class='cf-muted'>Run the complete matching pipeline for the current user: extract profile signals, retrieve open roles from employer sources, apply location preferences, score relevance, and refresh the ranked results below.</p>", unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div class='cf-command-steps'>
+              <div class='cf-step'><div class='cf-step-num'>1</div><div class='cf-step-title'>Extract</div><div class='cf-step-desc'>Parse resumes, CVs, portfolios, and public profile pages.</div></div>
+              <div class='cf-step'><div class='cf-step-num'>2</div><div class='cf-step-title'>Fetch</div><div class='cf-step-desc'>Detect ATS platforms and retrieve open roles.</div></div>
+              <div class='cf-step'><div class='cf-step-num'>3</div><div class='cf-step-title'>Rank</div><div class='cf-step-desc'>Score roles against skills, keywords, experience, and role targets.</div></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+        b1, b2 = st.columns([.58, .42])
+        with b1:
+            run_all = st.button("Run full match analysis", type="primary", use_container_width=True)
+        with b2:
+            run_scan = st.button("Scan with current profile", use_container_width=True)
+        b3, b4 = st.columns([.5, .5])
+        with b3:
+            build_only = st.button("Analyze profile only", use_container_width=True)
+        with b4:
+            export_ready = bool(st.session_state.matches)
+            if export_ready:
+                st.download_button(
+                    "Export matches CSV",
+                    matches_dataframe(st.session_state.matches).to_csv(index=False).encode("utf-8"),
+                    "careerfit_matches.csv",
+                    "text/csv",
+                    use_container_width=True,
+                )
+            else:
+                st.button("Export matches CSV", disabled=True, use_container_width=True)
+
+        if run_all:
+            ok = build_profile_action(url_blob, uploaded)
+            if ok or allow_unprofiled_scan:
+                run_scan_action(threshold, search_text, location_mode, include_unknown_locations, fast_mode, use_cache, allow_unprofiled_scan, scan_all_companies, company_limit, parallel_workers, max_years_experience)
+        if build_only:
+            build_profile_action(url_blob, uploaded)
+        if run_scan:
             run_scan_action(threshold, search_text, location_mode, include_unknown_locations, fast_mode, use_cache, allow_unprofiled_scan, scan_all_companies, company_limit, parallel_workers, max_years_experience)
-    if build_only:
-        build_profile_action(url_blob, uploaded)
-    if run_scan:
-        run_scan_action(threshold, search_text, location_mode, include_unknown_locations, fast_mode, use_cache, allow_unprofiled_scan, scan_all_companies, company_limit, parallel_workers, max_years_experience)
 
-    st.markdown("<div class='cf-card'><h3>Suggested role targets</h3>", unsafe_allow_html=True)
-    render_role_suggestions(st.session_state.profile)
-    st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("<div class='cf-card'><h3>Suggested role targets</h3>", unsafe_allow_html=True)
+        render_role_suggestions(st.session_state.profile)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-# Ranked job matches
-st.markdown("<div class='cf-subtitle'>Ranked job matches</div>", unsafe_allow_html=True)
-if not st.session_state.matches:
-    st.markdown("<div class='cf-alert cf-alert-info'>No ranked results yet. Add candidate profile inputs and employer career sources, then click <b>Run full match analysis</b>.</div>", unsafe_allow_html=True)
-else:
-    filt = st.columns([1.25, .85, .85, .85])
-    with filt[0]:
-        q = st.text_input("Search ranked jobs", placeholder="Search by title, skill, company, platform, or location")
-    with filt[1]:
-        company_filter = st.selectbox("Company", ["All"] + sorted({m.company for m in st.session_state.matches}))
-    with filt[2]:
-        platform_filter = st.selectbox("Platform", ["All"] + sorted({m.source for m in st.session_state.matches}))
-    with filt[3]:
-        view = st.selectbox("View", ["All ranked roles", "High-fit matches", "Review queue"], index=0,
-                           help="All ranked roles shows every fetched job sorted by score. High-fit matches shows only roles above the threshold.")
+    # Ranked job matches
+    st.markdown("<div class='cf-subtitle'>Ranked job matches</div>", unsafe_allow_html=True)
+    if not st.session_state.matches:
+        st.markdown("<div class='cf-alert cf-alert-info'>No ranked results yet. Add candidate profile inputs and employer career sources, then click <b>Run full match analysis</b>.</div>", unsafe_allow_html=True)
+    else:
+        filt = st.columns([1.25, .85, .85, .85])
+        with filt[0]:
+            q = st.text_input("Search ranked jobs", placeholder="Search by title, skill, company, platform, or location")
+        with filt[1]:
+            company_filter = st.selectbox("Company", ["All"] + sorted({m.company for m in st.session_state.matches}))
+        with filt[2]:
+            platform_filter = st.selectbox("Platform", ["All"] + sorted({m.source for m in st.session_state.matches}))
+        with filt[3]:
+            view = st.selectbox("View", ["All ranked roles", "High-fit matches", "Review queue"], index=0,
+                               help="All ranked roles shows every fetched job sorted by score. High-fit matches shows only roles above the threshold.")
 
-    matches = list(st.session_state.matches)
-    if q:
-        s = q.lower()
-        matches = [m for m in matches if s in " ".join([m.company, m.title, m.location or "", m.role_family, m.reason_summary]).lower()]
-    if company_filter != "All":
-        matches = [m for m in matches if m.company == company_filter]
-    if platform_filter != "All":
-        matches = [m for m in matches if m.source == platform_filter]
-    if view == "High-fit matches":
-        matches = [m for m in matches if m.score >= threshold]
-    elif view == "Review queue":
-        matches = [m for m in matches if m.score < threshold and m.score >= 0.45]
+        matches = list(st.session_state.matches)
+        if q:
+            s = q.lower()
+            matches = [m for m in matches if s in " ".join([m.company, m.title, m.location or "", m.role_family, m.reason_summary]).lower()]
+        if company_filter != "All":
+            matches = [m for m in matches if m.company == company_filter]
+        if platform_filter != "All":
+            matches = [m for m in matches if m.source == platform_filter]
+        if view == "High-fit matches":
+            matches = [m for m in matches if m.score >= threshold]
+        elif view == "Review queue":
+            matches = [m for m in matches if m.score < threshold and m.score >= 0.45]
 
-    if not matches:
-        st.markdown("<div class='cf-alert cf-alert-warn'>No jobs match the current filters. Try All ranked roles, lower the threshold, or broaden the search text.</div>", unsafe_allow_html=True)
-    for m in matches[:100]:
-        render_match_card(m, threshold)
+        if not matches:
+            st.markdown("<div class='cf-alert cf-alert-warn'>No jobs match the current filters. Try All ranked roles, lower the threshold, or broaden the search text.</div>", unsafe_allow_html=True)
+        for m in matches[:100]:
+            render_match_card(m, threshold, applied_job_ids=st.session_state.get("applied_job_ids", set()))
 
-run_apply_queue()
+    run_apply_queue()
+
+    # Insights and diagnostics remain on the same page, collapsed by default.
+    with st.expander("Source health, analytics, and diagnostics", expanded=False):
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            st.markdown("### Connector distribution")
+            if st.session_state.platform_summary:
+                st.bar_chart(pd.DataFrame([{"Platform": k, "Jobs": v} for k, v in st.session_state.platform_summary.items()]).set_index("Platform"))
+            else:
+                st.info("Run a match analysis to populate connector analytics.")
+            st.markdown("### Employer fetch status")
+            if st.session_state.source_stats:
+                st.dataframe(pd.DataFrame(st.session_state.source_stats), use_container_width=True, hide_index=True)
+            else:
+                st.info("No source diagnostics are available yet.")
+        with c2:
+            st.markdown("### Parsed candidate profile sources")
+            sources = [s.__dict__ for s in st.session_state.profile.sources]
+            if sources:
+                st.dataframe(pd.DataFrame(sources), use_container_width=True, hide_index=True)
+            else:
+                st.info("No candidate profile sources have been analyzed yet.")
+            st.markdown("### Execution log")
+            if st.session_state.run_log:
+                for item in st.session_state.run_log[:30]:
+                    st.code(item)
+            else:
+                st.info("No execution logs are available yet.")
+        st.markdown("### Fetched role table")
+        if st.session_state.jobs:
+            st.dataframe(job_dataframe(st.session_state.jobs), use_container_width=True, hide_index=True)
+        else:
+            st.info("No roles have been fetched yet.")
+        with st.expander("Candidate profile text preview"):
+            st.text_area("Profile evidence text", st.session_state.profile.combined_text[:15000], height=260, label_visibility="collapsed")
+        with st.expander("Raw match data"):
+            st.json([m.to_dict() for m in st.session_state.matches[:15]])
+
+elif st.session_state.active_tab == "profile":
+    render_profile_tab()
+
+elif st.session_state.active_tab == "autoapply":
+    st.markdown("""
+        <div class='cf-card'>
+          <h3>&#x1F680; Auto-Apply Center</h3>
+          <p class='cf-muted'>Configure your continuous auto-apply loop, manage your Q&A answers, and review application results. Save your profile first to enable auto-apply.</p>
+        </div>
+    """, unsafe_allow_html=True)
+    if not st.session_state.get("db_profile", {}).get("email"):
+        st.warning("Please complete your Profile Setup before using Auto-Apply.")
+        if st.button("Go to Profile Setup", key="goto_profile_from_autoapply"):
+            st.session_state.active_tab = "profile"
+            st.rerun()
 
 # Insights and diagnostics remain on the same page, collapsed by default.
 with st.expander("Source health, analytics, and diagnostics", expanded=False):
