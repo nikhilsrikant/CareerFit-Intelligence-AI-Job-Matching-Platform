@@ -1429,6 +1429,139 @@ def render_profile_tab() -> None:
                 st.error(f"Failed to save profile: {exc}")
 
 
+def render_autoapply_tab() -> None:
+    """Render the full Auto-Apply Center tab."""
+    from streamlit_apply_patch import run_continuous_apply, _render_results
+
+    st.markdown("""
+        <div class='cf-section-header'>
+          <h2>&#x1F680; Auto-Apply Center</h2>
+          <p>Zero-interaction job applications: the system matches, filters, and applies on your behalf.</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    db_profile = st.session_state.get("db_profile", {})
+    profile_ready = bool(db_profile.get("email"))
+
+    if not profile_ready:
+        st.warning("Please complete your Profile Setup before using Auto-Apply.")
+        if st.button("Go to Profile Setup", key="goto_profile_autoapply"):
+            st.session_state.active_tab = "profile"
+            st.rerun()
+        return
+
+    # ── Platform Credentials Summary ─────────────────────────────────────
+    st.markdown("<div class='cf-card'><h3>🔑 Platform Credentials</h3>", unsafe_allow_html=True)
+    _platforms_data = db_profile.get("platforms") or {}
+    if isinstance(_platforms_data, str):
+        try:
+            import json as _jj; _platforms_data = _jj.loads(_platforms_data)
+        except Exception:
+            _platforms_data = {}
+    _plat_names = ["Workday", "Greenhouse", "Ashby", "Lever", "SmartRecruiters"]
+    _plat_rows = ""
+    for _p in _plat_names:
+        _pk = _p.lower()
+        _pcreds = _platforms_data.get(_pk, {})
+        _email_ok = "✅" if _pcreds.get("email") else "⬜"
+        _pass_ok  = "✅" if _pcreds.get("password") else "⬜"
+        _plat_rows += f"<tr><td style='padding:7px 12px;font-size:13px;color:#1E293B'>{_p}</td><td style='padding:7px 12px;font-size:12px'>{_email_ok} {_pcreds.get('email','—')[:30]}</td><td style='padding:7px 12px;text-align:center;font-size:13px'>{_pass_ok}</td></tr>"
+    st.markdown(
+        f"<table style='width:100%;border-collapse:collapse;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden'>"
+        f"<thead><tr>"
+        f"<th style='padding:9px 12px;background:#F1F5F9;color:#334155;font-size:11px;text-align:left'>Platform</th>"
+        f"<th style='padding:9px 12px;background:#F1F5F9;color:#334155;font-size:11px;text-align:left'>Email</th>"
+        f"<th style='padding:9px 12px;background:#F1F5F9;color:#334155;font-size:11px;text-align:center'>Password</th>"
+        f"</tr></thead><tbody>{_plat_rows}</tbody></table>",
+        unsafe_allow_html=True,
+    )
+    st.caption("To update credentials, go to the Profile Setup tab.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Q&A Answers ───────────────────────────────────────────────────────
+    render_qa_section()
+
+    # ── Continuous Apply Settings ─────────────────────────────────────────
+    st.markdown("<div class='cf-card'><h3>⚙️ Continuous Apply Settings</h3>", unsafe_allow_html=True)
+    ca1, ca2 = st.columns(2)
+    with ca1:
+        delay_between_secs = st.slider("Delay between applications (seconds)", 10, 120, 45, key="ca_delay")
+        max_applications   = st.number_input("Max applications per run", 1, 200, 50, key="ca_max_apps")
+    with ca2:
+        apply_threshold    = st.slider("Minimum match score to apply", 0.70, 0.99, 0.90, 0.01, key="ca_threshold",
+                                        help="90% recommended for quality applications")
+        dry_run_continuous = st.toggle("Dry run (fill forms, do not submit)", value=True, key="ca_dry_run")
+        headless_cont      = st.toggle("Headless browser", value=True, key="ca_headless")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Apply Status ──────────────────────────────────────────────────────
+    matches_count     = len(st.session_state.get("matches", []))
+    eligible_count    = sum(
+        1 for m in st.session_state.get("matches", [])
+        if m.score >= apply_threshold and m.decision not in ("f1_filtered","role_filtered")
+    )
+    applied_count     = len(st.session_state.get("applied_job_ids", set()))
+
+    st.markdown("<div class='cf-grid'>", unsafe_allow_html=True)
+    mc = st.columns(3)
+    with mc[0]:
+        render_metric("Total ranked matches", str(matches_count), "from last scan")
+    with mc[1]:
+        render_metric(f"Eligible (>= {int(apply_threshold*100)}%)", str(eligible_count), "after filters + threshold")
+    with mc[2]:
+        render_metric("Already applied", str(applied_count), "tracked in DB")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Start / Stop Controls ─────────────────────────────────────────────
+    is_running = st.session_state.get("continuous_apply_running", False)
+    no_matches = not st.session_state.get("matches")
+
+    ctrl1, ctrl2, ctrl3 = st.columns([2, 1, 2])
+    with ctrl1:
+        start_clicked = st.button(
+            "🚀 Start Continuous Apply",
+            type="primary",
+            use_container_width=True,
+            disabled=(is_running or no_matches or not profile_ready),
+            key="start_continuous_apply_btn",
+            help="Runs a full automated apply loop on all eligible jobs." if not no_matches else "Run Job Matching first to get results.",
+        )
+    with ctrl2:
+        if st.button("⏹ Stop", use_container_width=True, key="stop_continuous_apply_btn",
+                     disabled=not is_running):
+            st.session_state.continuous_apply_stop = True
+            st.rerun()
+
+    with ctrl3:
+        if no_matches:
+            st.markdown("<div class='cf-alert cf-alert-warn'>Run Job Matching first to populate results.</div>", unsafe_allow_html=True)
+        elif is_running:
+            st.markdown("<div class='cf-alert cf-alert-info'>Auto-apply loop is running…</div>", unsafe_allow_html=True)
+
+    if start_clicked:
+        st.session_state.continuous_apply_running = True
+        st.session_state.continuous_apply_stop    = False
+        st.rerun()
+
+    # ── Running loop ──────────────────────────────────────────────────────
+    if st.session_state.get("continuous_apply_running", False):
+        run_continuous_apply(
+            threshold    = apply_threshold,
+            delay_secs   = delay_between_secs,
+            max_apps     = max_applications,
+            dry_run      = dry_run_continuous,
+            headless     = headless_cont,
+            qa_answers   = st.session_state.get("qa_answers", []),
+        )
+
+    # ── Past results ──────────────────────────────────────────────────────
+    past = st.session_state.get("continuous_apply_results") or st.session_state.get("apply_results", [])
+    if past:
+        st.markdown("---")
+        st.markdown("### Apply Results")
+        _render_results(past)
+
+
 def render_qa_section() -> None:
     """Render the Q&A Answer Store section inside the Auto-Apply tab."""
     try:
@@ -1854,18 +1987,7 @@ elif st.session_state.active_tab == "profile":
     render_profile_tab()
 
 elif st.session_state.active_tab == "autoapply":
-    st.markdown("""
-        <div class='cf-section-header'>
-          <h2>&#x1F680; Auto-Apply Center</h2>
-          <p>Configure your continuous auto-apply loop and manage Q&A answers for zero-interaction job applications.</p>
-        </div>
-    """, unsafe_allow_html=True)
-    if not st.session_state.get("db_profile", {}).get("email"):
-        st.warning("Please complete your Profile Setup before using Auto-Apply.")
-        if st.button("Go to Profile Setup", key="goto_profile_from_autoapply"):
-            st.session_state.active_tab = "profile"
-            st.rerun()
-    render_qa_section()
+    render_autoapply_tab()
 
 # Insights and diagnostics remain on the same page, collapsed by default.
 with st.expander("Source health, analytics, and diagnostics", expanded=False):
