@@ -40,6 +40,10 @@ from careerfit.fetchers import (
 )
 from careerfit.matching import JobMatch, extract_intent_terms, rank_jobs
 from careerfit.source_intelligence import RuntimeProfile, build_runtime_profile
+try:
+    from careerfit.filters import apply_filters as _apply_filters
+except ImportError:
+    _apply_filters = None
 from streamlit_apply_patch import (
     init_apply_session_state,
     render_apply_queue_panel,
@@ -1070,6 +1074,8 @@ def run_scan_action(
     company_limit: int,
     parallel_workers: int,
     max_years_experience: int = 10,
+    f1_filter: bool = True,
+    role_type_filter: bool = True,
 ) -> bool:
     total_available = len(all_companies())
     companies = selected_companies_for_run(scan_all_companies, company_limit)
@@ -1134,6 +1140,30 @@ def run_scan_action(
             intent_terms=extract_intent_terms(search_text),
             max_years_experience=max_years_experience,
         )
+        # Apply F-1 and role-type filters and tag matches with metadata
+        if _apply_filters is not None and (f1_filter or role_type_filter):
+            # Build a lookup from canonical_url -> NormalizedJob for fast access
+            _job_lookup = {j.canonical_url: j for j in jobs}
+            for _m in matches:
+                _nj = _job_lookup.get(_m.canonical_url)
+                if _nj is None:
+                    continue
+                _passes, _meta = _apply_filters(_nj, f1_filter, role_type_filter)
+                # Stamp metadata onto raw_job dict for badge rendering
+                _m.raw_job["f1_friendly"]    = _meta.get("f1_friendly", False)
+                _m.raw_job["f1_blocked"]     = _meta.get("f1_blocked", False)
+                _m.raw_job["is_target_role"] = _meta.get("is_target_role", False)
+                _m.raw_job["role_types"]     = _meta.get("role_types", [])
+                if not _passes:
+                    if _meta.get("f1_blocked"):
+                        _m.decision = "f1_filtered"
+                    elif not _meta.get("is_target_role"):
+                        _m.decision = "role_filtered"
+            # Sort: passing matches first, then filtered ones
+            matches.sort(key=lambda _x: (
+                0 if _x.decision not in ("f1_filtered", "role_filtered") else 1,
+                -_x.score
+            ))
         progress.empty()
 
     elapsed = time.perf_counter() - start
@@ -1447,6 +1477,12 @@ with st.sidebar:
         min_value=0, max_value=10, value=2, step=1,
         help="Roles asking for more than this many years of experience get penalized in ranking. Set to 10 to disable.",
     )
+    f1_filter = st.toggle("F-1 Visa filter (skip clearance/no-sponsor)", value=True,
+                           help="Hides roles requiring security clearance, US citizenship only, or no sponsorship.", key="f1_filter_toggle")
+    role_type_filter = st.toggle("Fall/New Grad roles only", value=True,
+                                  help="Shows only Fall Intern, Fall Co-op, New Grad, and Entry Level roles.", key="role_type_filter_toggle")
+    st.session_state["f1_filter"] = f1_filter
+    st.session_state["role_type_filter"] = role_type_filter
     location_mode = st.selectbox("Location preference", ["United States / Remote only", "Global"], index=0)
     include_unknown_locations = st.checkbox("Include roles with unspecified locations", value=False)
     fast_mode = st.toggle("Fast matching mode", value=True, help="Uses listing metadata for faster results. Disable only when deeper job-description fetching is required.")
@@ -1630,11 +1666,15 @@ if st.session_state.active_tab == "matching":
         if run_all:
             ok = build_profile_action(url_blob, uploaded)
             if ok or allow_unprofiled_scan:
-                run_scan_action(threshold, search_text, location_mode, include_unknown_locations, fast_mode, use_cache, allow_unprofiled_scan, scan_all_companies, company_limit, parallel_workers, max_years_experience)
+                run_scan_action(threshold, search_text, location_mode, include_unknown_locations, fast_mode, use_cache, allow_unprofiled_scan, scan_all_companies, company_limit, parallel_workers, max_years_experience,
+                                f1_filter=st.session_state.get("f1_filter", True),
+                                role_type_filter=st.session_state.get("role_type_filter", True))
         if build_only:
             build_profile_action(url_blob, uploaded)
         if run_scan:
-            run_scan_action(threshold, search_text, location_mode, include_unknown_locations, fast_mode, use_cache, allow_unprofiled_scan, scan_all_companies, company_limit, parallel_workers, max_years_experience)
+            run_scan_action(threshold, search_text, location_mode, include_unknown_locations, fast_mode, use_cache, allow_unprofiled_scan, scan_all_companies, company_limit, parallel_workers, max_years_experience,
+                            f1_filter=st.session_state.get("f1_filter", True),
+                            role_type_filter=st.session_state.get("role_type_filter", True))
 
         st.markdown("<div class='cf-card'><h3>Suggested role targets</h3>", unsafe_allow_html=True)
         render_role_suggestions(st.session_state.profile)
