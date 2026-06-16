@@ -1,0 +1,15 @@
+# Database files — may contain plaintext credentials
+**/data/*.db
+**/data/**/*.db
+**/data/browser_session.json
+
+# Python cache
+__pycache__/
+*.py[cod]
+.Python
+
+# Virtual environment
+.env
+.venv
+venv/
+env/

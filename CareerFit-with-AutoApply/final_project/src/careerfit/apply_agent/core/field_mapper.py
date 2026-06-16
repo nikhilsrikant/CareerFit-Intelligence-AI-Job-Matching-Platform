@@ -84,22 +84,45 @@ class FieldMapper:
         value = mapper.resolve("Current Job Title")
     """
 
-    def __init__(self, applicant_cfg: dict, runtime_profile=None):
+    def __init__(self, applicant_cfg: dict, runtime_profile=None, qa_answers: "list[dict] | None" = None):
         """
         applicant_cfg: loaded from applicant_profile.yaml
         runtime_profile: careerfit.source_intelligence.RuntimeProfile (optional but recommended)
+        qa_answers: list of dicts with 'question_pattern' and 'answer' keys
         """
         self._cfg = applicant_cfg
         self._profile = runtime_profile
+        self._qa_answers = qa_answers or []
         self._cache: dict[str, Optional[Any]] = {}
 
     # ── Public API ──────────────────────────────────────────────────────────
+
+    def resolve_qa(self, label: str) -> "Optional[Any]":
+        """Try to resolve a form label using the user's pre-entered Q&A answer bank."""
+        if not self._qa_answers:
+            return None
+        label_l = label.lower().strip()
+        for qa in self._qa_answers:
+            pattern = str(qa.get("question_pattern", "")).lower().strip()
+            if not pattern:
+                continue
+            # Forward match: pattern substring of label
+            if pattern in label_l:
+                return qa.get("answer", "")
+            # Reverse match: label substring of pattern
+            if label_l in pattern:
+                return qa.get("answer", "")
+        return None
 
     def resolve(self, label: str, field_type: str = "text") -> Optional[Any]:
         """
         Return the value to fill for a given form label.
         field_type: 'text' | 'file' | 'select' | 'radio' | 'checkbox'
         Returns None if no mapping found.
+
+        Priority order:
+          1. Structured profile fields (_get_value) — explicit user data wins.
+          2. Q&A answer bank (resolve_qa) — fallback for fields not in the profile.
         """
         key_label = label.lower().strip()
         cache_key = f"{key_label}::{field_type}"
@@ -107,7 +130,17 @@ class FieldMapper:
             return self._cache[cache_key]
 
         profile_key = self._match_key(key_label)
+        # Try structured profile first; fall back to Q&A only when profile has no value
         value = self._get_value(profile_key, field_type) if profile_key else None
+        if value is None:
+            # Try QA with the raw label first, then with every synonym for the matched key
+            # so that e.g. a QA pattern "current company" fires for label "current employer"
+            value = self.resolve_qa(key_label)
+            if value is None and profile_key:
+                for syn in FIELD_SYNONYMS.get(profile_key, []):
+                    value = self.resolve_qa(syn)
+                    if value is not None:
+                        break
         self._cache[cache_key] = value
         return value
 
@@ -193,7 +226,7 @@ class FieldMapper:
             "country":            p.get("country", "United States"),
             "zip_code":           p.get("zip_code"),
             "address":            p.get("address"),
-            "resume":             p.get("resume_path"),    # file path used by file-upload adapters
+            "resume":             self._resolve_resume_path(p.get("resume_path")),  # resolved path
             "cover_letter":       p.get("cover_letter_text") or "",
             "years_experience":   str(p.get("years_experience", "")),
             "current_company":    p.get("current_company"),
@@ -218,6 +251,30 @@ class FieldMapper:
 
         # For select/radio fields return the value; the adapter handles matching to options
         return val
+
+    def _resolve_resume_path(self, filename: "str | None") -> "str | None":
+        """Resolve a stored resume filename (possibly bare or absolute) to a real path.
+
+        Storing only the filename in the DB means the path must be reconstructed
+        at runtime.  If the stored value is already an absolute path that exists,
+        it is returned as-is.  Otherwise the method tries common locations relative
+        to this file's package root.
+        """
+        if not filename:
+            return None
+        from pathlib import Path as _Path
+        p = _Path(filename)
+        if p.is_absolute() and p.exists():
+            return str(p)
+        # Try data/ directory at several parent levels to handle different layouts
+        candidates = [
+            _Path(__file__).resolve().parent.parent.parent.parent / "data" / p.name,
+            _Path(__file__).resolve().parent.parent.parent.parent.parent / "data" / p.name,
+        ]
+        for c in candidates:
+            if c.exists():
+                return str(c)
+        return str(p)  # return as-is; let the caller handle missing file
 
 
 def _join(*parts: Optional[str], sep: str = ", ") -> Optional[str]:

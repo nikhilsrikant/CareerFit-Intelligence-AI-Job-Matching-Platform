@@ -21,6 +21,172 @@ _STATUS_COLOR = {
     "skipped": "#F59E0B", "dry_run": "#7C3AED",
 }
 
+
+def build_apply_cfg(db_profile: dict, platform: str) -> dict:
+    """Build the applicant config dict for a specific platform from the DB profile.
+
+    Merges global profile fields with per-platform credentials.
+    Falls back to global email/password if no per-platform entry exists.
+    """
+    cfg = dict(db_profile)
+    platforms_data = cfg.pop("platforms", None) or {}
+    if isinstance(platforms_data, str):
+        try:
+            import json as _json
+            platforms_data = _json.loads(platforms_data)
+        except Exception:
+            platforms_data = {}
+    plat_key = (platform or "").lower()
+    plat_creds = platforms_data.get(plat_key, {})
+    if plat_creds.get("email"):
+        cfg["email"] = plat_creds["email"]
+    if plat_creds.get("password"):
+        cfg["password"] = plat_creds["password"]
+    return cfg
+
+
+def run_continuous_apply(
+    threshold: float = 0.90,
+    delay_secs: int = 45,
+    max_apps: int = 50,
+    dry_run: bool = True,
+    headless: bool = True,
+    qa_answers: "list[dict] | None" = None,
+) -> None:
+    """
+    Continuous auto-apply loop. Fetches ranked matches from session_state, filters
+    by threshold + F-1/role decisions + duplicate check, and applies sequentially.
+    Updates progress in real time via st.empty().
+    """
+    import time as _time
+    try:
+        from careerfit import db as _db
+        from careerfit.apply_agent.engine import ApplicationEngine
+    except ImportError as _e:
+        st.error(f"Required module not available: {_e}")
+        st.session_state.continuous_apply_running = False
+        return
+
+    db_profile = _db.load_profile()
+    if not db_profile or not db_profile.get("email"):
+        st.error("Profile not configured. Please complete the Profile Setup tab first.")
+        st.session_state.continuous_apply_running = False
+        return
+
+    matches = list(st.session_state.get("matches", []))
+    if not matches:
+        st.warning("No job matches available. Run Job Matching first to get results.")
+        st.session_state.continuous_apply_running = False
+        return
+
+    # Build apply list: score threshold + not filtered + not already applied
+    already_applied = _db.get_applied_job_ids()
+    apply_list = []
+    for m in matches:
+        if m.score < threshold:
+            continue
+        if m.decision in ("f1_filtered", "role_filtered"):
+            continue
+        job_id = str(m.raw_job.get("external_job_id") or "")
+        if _db.is_already_applied(job_id, m.canonical_url):
+            continue
+        apply_list.append(m)
+
+    apply_list = apply_list[:max_apps]
+
+    if not apply_list:
+        st.info(f"No new jobs to apply to (threshold: {int(threshold*100)}%, filters active, duplicates excluded).")
+        st.session_state.continuous_apply_running = False
+        return
+
+    label = "Dry-running" if dry_run else "Applying to"
+    progress_container = st.empty()
+    results_container = st.empty()
+    all_results = []
+
+    # NOTE: This is a synchronous loop that blocks the Streamlit render thread.
+    # For a production deployment, this should run in a background thread.
+    # For single-user local use, this is acceptable.
+    st.warning("Auto-apply is running synchronously. The browser tab will be unresponsive until complete. Use the Stop button to interrupt between applications.")
+
+    for i, match in enumerate(apply_list):
+        # Check stop flag
+        if st.session_state.get("continuous_apply_stop", False):
+            progress_container.info(f"Stopped by user after {i} applications.")
+            break
+
+        progress_container.markdown(
+            f"<div class='cf-alert cf-alert-info'>⚡ {label} <b>{match.company}</b> — {match.title} "
+            f"({i+1}/{len(apply_list)}) | Score: {int(match.score*100)}%</div>",
+            unsafe_allow_html=True,
+        )
+
+        job_dict = {
+            "canonical_url": match.canonical_url,
+            "title":         match.title,
+            "company":       match.company,
+            "source":        match.source,
+            "location":      match.location or "",
+        }
+
+        # Build per-platform config
+        apply_cfg = build_apply_cfg(db_profile, match.source)
+        apply_cfg["dry_run"] = dry_run
+
+        # Monkey-patch load_profile to return our cfg for this run
+        # NOTE: this module-level attribute swap is safe for single-user local deployments.
+        # In a multi-user production deployment, refactor ApplicationEngine to accept
+        # profile_dict as a constructor argument to eliminate the patch.
+        try:
+            import careerfit.apply_agent.engine as _eng
+            _orig_lp = _eng.load_profile
+            _eng.load_profile = lambda *a, **kw: apply_cfg
+
+            job_results = ApplicationEngine.run_sync(
+                jobs=[job_dict],
+                runtime_profile=st.session_state.get("profile"),
+                headless=headless,
+                max_concurrent=1,
+                storage_state=DEFAULT_STORAGE_STATE,
+                qa_answers=qa_answers,
+            )
+        except Exception as exc:
+            job_results = [{"status": "failed", "reason": str(exc),
+                            "company": match.company, "title": match.title,
+                            "ats": match.source, "time_s": 0}]
+        finally:
+            _eng.load_profile = _orig_lp
+
+        if job_results:
+            result = job_results[0]
+            result["company"] = match.company
+            result["title"]   = match.title
+            result["ats"]     = match.source
+
+            if result.get("status") == "success" and not dry_run:
+                job_id = str(match.raw_job.get("external_job_id") or "")
+                _db.mark_applied(job_id, match.canonical_url, match.company, match.title, match.source)
+                st.session_state.applied_job_ids = _db.get_applied_job_ids()
+
+            all_results.append(result)
+            st.session_state.continuous_apply_results = all_results
+            st.session_state.apply_results = all_results  # also show in sidebar panel
+
+        # Delay between applications (skip on last)
+        # NOTE: time.sleep here keeps the render thread blocked for the full delay.
+        if i < len(apply_list) - 1 and not st.session_state.get("continuous_apply_stop", False):
+            _time.sleep(delay_secs)
+
+    st.session_state.continuous_apply_running = False
+    st.session_state.continuous_apply_stop = False
+    ok   = sum(1 for r in all_results if r.get("status") == "success")
+    bad  = sum(1 for r in all_results if r.get("status") == "failed")
+    skip = sum(1 for r in all_results if r.get("status") == "skipped")
+    note = " (dry run — not submitted)" if dry_run else ""
+    progress_container.success(f"Auto-apply complete{note}: {ok} ✅  {skip} ⏭  {bad} ❌  out of {len(all_results)} attempted")
+    st.rerun()
+
+
 # ── 1. Session state ──────────────────────────────────────────────────────────
 
 def init_apply_session_state():
@@ -31,6 +197,9 @@ def init_apply_session_state():
         "apply_dry_run":      True,
         "apply_headless":     True,
         "apply_max_concurrent": 2,
+        "continuous_apply_running": False,
+        "continuous_apply_stop": False,
+        "continuous_apply_results": [],
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -66,7 +235,7 @@ def render_apply_button(match) -> None:
 
 def render_apply_queue_panel() -> None:
     st.markdown("---")
-    st.markdown("<div class='cf-side-label'>⚡ Auto-Apply Queue</div>", unsafe_allow_html=True)
+    st.markdown("<div class='cf-side-label'>⚡ Manual Apply Queue</div>", unsafe_allow_html=True)
 
     queue = st.session_state.apply_queue
     n = len(queue)
@@ -168,6 +337,7 @@ def run_apply_queue() -> None:
                 headless=st.session_state.apply_headless,
                 max_concurrent=st.session_state.apply_max_concurrent,
                 storage_state=DEFAULT_STORAGE_STATE,
+                qa_answers=st.session_state.get("qa_answers", []),
             )
             _eng.load_profile = _orig  # restore
 

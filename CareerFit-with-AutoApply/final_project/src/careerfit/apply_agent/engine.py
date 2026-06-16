@@ -28,10 +28,26 @@ _BLOCK_URL_PATTERNS = [
 def load_profile(profile_path: Optional[str] = None) -> dict:
     """
     Load applicant profile from:
-      1. st.secrets  (Streamlit Cloud — preferred)
-      2. Local YAML file (local dev fallback)
+      1. SQLite DB profile  (populated via the Profile Setup tab — preferred)
+      2. st.secrets  (Streamlit Cloud fallback)
+      3. Local YAML file (local dev fallback)
     """
-    # Try st.secrets first (always available on Streamlit Cloud)
+    # Try SQLite DB profile first (populated via the Profile Setup tab)
+    try:
+        import sys as _sys
+        from pathlib import Path as _Path
+        _root = _Path(__file__).resolve().parent.parent.parent.parent.parent  # final_project/
+        _src = _root / "src"
+        if str(_src) not in _sys.path:
+            _sys.path.insert(0, str(_src))
+        from careerfit.db import load_profile as _db_load_profile
+        _db_data = _db_load_profile()
+        if _db_data and _db_data.get("email"):
+            return _db_data
+    except Exception:
+        pass
+
+    # Try st.secrets (always available on Streamlit Cloud)
     try:
         import streamlit as st
         if hasattr(st, "secrets") and len(st.secrets) > 0:
@@ -59,10 +75,12 @@ class ApplicationEngine:
 
     def __init__(self, profile_path: Optional[str] = None,
                  headless: bool = True,
-                 storage_state: Optional[str] = None):
+                 storage_state: Optional[str] = None,
+                 qa_answers: "list[dict] | None" = None):
         self._profile_path = profile_path
         self._headless = headless
         self._storage_state = storage_state
+        self._qa_answers = qa_answers or []
         self._field_mapper: Optional[FieldMapper] = None
         self._pw = None
         self._browser = None
@@ -71,7 +89,7 @@ class ApplicationEngine:
     async def start(self, runtime_profile=None):
         from playwright.async_api import async_playwright
         cfg = load_profile(self._profile_path)
-        self._field_mapper = FieldMapper(cfg, runtime_profile)
+        self._field_mapper = FieldMapper(cfg, runtime_profile, qa_answers=self._qa_answers)
 
         self._pw = await async_playwright().start()
         self._browser = await self._pw.chromium.launch(
@@ -157,10 +175,11 @@ class ApplicationEngine:
                  runtime_profile=None,
                  headless: bool = True,
                  max_concurrent: int = 2,
-                 storage_state: Optional[str] = None) -> list[dict]:
+                 storage_state: Optional[str] = None,
+                 qa_answers: "list[dict] | None" = None) -> list[dict]:
         """Blocking wrapper — safe to call from Streamlit."""
         async def _run():
-            engine = cls(profile_path, headless=headless, storage_state=storage_state)
+            engine = cls(profile_path, headless=headless, storage_state=storage_state, qa_answers=qa_answers)
             await engine.start(runtime_profile)
             try:
                 return await engine.apply_batch(jobs, max_concurrent)
