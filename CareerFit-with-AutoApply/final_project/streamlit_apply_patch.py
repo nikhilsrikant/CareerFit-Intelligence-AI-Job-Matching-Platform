@@ -104,6 +104,11 @@ def run_continuous_apply(
     results_container = st.empty()
     all_results = []
 
+    # NOTE: This is a synchronous loop that blocks the Streamlit render thread.
+    # For a production deployment, this should run in a background thread.
+    # For single-user local use, this is acceptable.
+    st.warning("Auto-apply is running synchronously. The browser tab will be unresponsive until complete. Use the Stop button to interrupt between applications.")
+
     for i, match in enumerate(apply_list):
         # Check stop flag
         if st.session_state.get("continuous_apply_stop", False):
@@ -129,6 +134,9 @@ def run_continuous_apply(
         apply_cfg["dry_run"] = dry_run
 
         # Monkey-patch load_profile to return our cfg for this run
+        # NOTE: this module-level attribute swap is safe for single-user local deployments.
+        # In a multi-user production deployment, refactor ApplicationEngine to accept
+        # profile_dict as a constructor argument to eliminate the patch.
         try:
             import careerfit.apply_agent.engine as _eng
             _orig_lp = _eng.load_profile
@@ -165,6 +173,7 @@ def run_continuous_apply(
             st.session_state.apply_results = all_results  # also show in sidebar panel
 
         # Delay between applications (skip on last)
+        # NOTE: time.sleep here keeps the render thread blocked for the full delay.
         if i < len(apply_list) - 1 and not st.session_state.get("continuous_apply_stop", False):
             _time.sleep(delay_secs)
 

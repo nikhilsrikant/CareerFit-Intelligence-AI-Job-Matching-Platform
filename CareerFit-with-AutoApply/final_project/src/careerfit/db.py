@@ -106,9 +106,20 @@ def init_db() -> None:
                 id               INTEGER PRIMARY KEY AUTOINCREMENT,
                 question_pattern TEXT NOT NULL,
                 answer           TEXT NOT NULL,
-                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Add a unique index on question_pattern so INSERT OR REPLACE deduplicates.
+        # ALTER TABLE in SQLite cannot add constraints, so we use CREATE UNIQUE INDEX
+        # with IF NOT EXISTS — safe to run even if the table already exists.
+        try:
+            cur.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_qa_pattern ON qa_answers(question_pattern)"
+            )
+        except Exception:
+            pass  # index already present or schema mismatch — non-fatal
 
         conn.commit()
     finally:
@@ -240,11 +251,15 @@ def get_applied_job_ids() -> "set[str]":
 # ---------------------------------------------------------------------------
 
 def save_qa_answer(pattern: str, answer: str) -> None:
-    """Persist a question-pattern / answer pair."""
+    """Persist a question-pattern / answer pair.
+
+    Uses INSERT OR REPLACE so a duplicate pattern updates the existing row
+    rather than accumulating stale duplicates.
+    """
     conn = get_conn()
     try:
         conn.execute(
-            "INSERT INTO qa_answers (question_pattern, answer) VALUES (?, ?)",
+            "INSERT OR REPLACE INTO qa_answers (question_pattern, answer, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
             (pattern, answer),
         )
         conn.commit()
@@ -253,10 +268,10 @@ def save_qa_answer(pattern: str, answer: str) -> None:
 
 
 def load_qa_answers() -> "list[dict]":
-    """Return all Q&A pairs ordered by insertion id."""
+    """Return all Q&A pairs, newest-updated first."""
     conn = get_conn()
     try:
-        cur = conn.execute("SELECT * FROM qa_answers ORDER BY id")
+        cur = conn.execute("SELECT * FROM qa_answers ORDER BY updated_at DESC, id DESC")
         return [dict(row) for row in cur.fetchall()]
     finally:
         conn.close()
@@ -275,4 +290,18 @@ def delete_qa_answer(answer_id: int) -> None:
 # ---------------------------------------------------------------------------
 # Bootstrap on import
 # ---------------------------------------------------------------------------
-init_db()
+# Guard with a flag to prevent repeated DB opens on Streamlit hot-reloads.
+# Note: module-level code in Python only runs once per process (unless the
+# module is explicitly reloaded), but the flag makes the intent explicit and
+# guards against any reload edge cases.
+_DB_INITIALIZED = False
+
+
+def _ensure_init() -> None:
+    global _DB_INITIALIZED
+    if not _DB_INITIALIZED:
+        init_db()
+        _DB_INITIALIZED = True
+
+
+_ensure_init()

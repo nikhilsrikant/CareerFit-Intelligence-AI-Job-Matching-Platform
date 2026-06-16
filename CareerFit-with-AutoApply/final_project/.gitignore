@@ -1,0 +1,20 @@
+# Database files — may contain plaintext credentials
+data/*.db
+data/*.json
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+
+# Environment
+.env
+.venv
+venv/
+env/
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/

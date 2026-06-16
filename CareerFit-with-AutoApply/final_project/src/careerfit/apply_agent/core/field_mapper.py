@@ -119,6 +119,10 @@ class FieldMapper:
         Return the value to fill for a given form label.
         field_type: 'text' | 'file' | 'select' | 'radio' | 'checkbox'
         Returns None if no mapping found.
+
+        Priority order:
+          1. Structured profile fields (_get_value) — explicit user data wins.
+          2. Q&A answer bank (resolve_qa) — fallback for fields not in the profile.
         """
         key_label = label.lower().strip()
         cache_key = f"{key_label}::{field_type}"
@@ -126,12 +130,10 @@ class FieldMapper:
             return self._cache[cache_key]
 
         profile_key = self._match_key(key_label)
-        # Try Q&A answer bank first when it explicitly answers the question
-        qa_value = self.resolve_qa(key_label)
-        if qa_value is not None:
-            value = qa_value
-        else:
-            value = self._get_value(profile_key, field_type) if profile_key else None
+        # Try structured profile first; fall back to Q&A only when profile has no value
+        value = self._get_value(profile_key, field_type) if profile_key else None
+        if not value:
+            value = self.resolve_qa(key_label)
         self._cache[cache_key] = value
         return value
 
@@ -217,7 +219,7 @@ class FieldMapper:
             "country":            p.get("country", "United States"),
             "zip_code":           p.get("zip_code"),
             "address":            p.get("address"),
-            "resume":             p.get("resume_path"),    # file path used by file-upload adapters
+            "resume":             self._resolve_resume_path(p.get("resume_path")),  # resolved path
             "cover_letter":       p.get("cover_letter_text") or "",
             "years_experience":   str(p.get("years_experience", "")),
             "current_company":    p.get("current_company"),
@@ -242,6 +244,30 @@ class FieldMapper:
 
         # For select/radio fields return the value; the adapter handles matching to options
         return val
+
+    def _resolve_resume_path(self, filename: "str | None") -> "str | None":
+        """Resolve a stored resume filename (possibly bare or absolute) to a real path.
+
+        Storing only the filename in the DB means the path must be reconstructed
+        at runtime.  If the stored value is already an absolute path that exists,
+        it is returned as-is.  Otherwise the method tries common locations relative
+        to this file's package root.
+        """
+        if not filename:
+            return None
+        from pathlib import Path as _Path
+        p = _Path(filename)
+        if p.is_absolute() and p.exists():
+            return str(p)
+        # Try data/ directory at several parent levels to handle different layouts
+        candidates = [
+            _Path(__file__).resolve().parent.parent.parent.parent / "data" / p.name,
+            _Path(__file__).resolve().parent.parent.parent.parent.parent / "data" / p.name,
+        ]
+        for c in candidates:
+            if c.exists():
+                return str(c)
+        return str(p)  # return as-is; let the caller handle missing file
 
 
 def _join(*parts: Optional[str], sep: str = ", ") -> Optional[str]:

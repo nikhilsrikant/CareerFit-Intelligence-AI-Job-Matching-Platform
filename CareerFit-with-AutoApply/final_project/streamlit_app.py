@@ -1237,7 +1237,7 @@ def render_profile_tab() -> None:
             resume_save_path = ROOT / "data" / resume_file.name
             resume_save_path.parent.mkdir(parents=True, exist_ok=True)
             resume_save_path.write_bytes(resume_file.getvalue())
-            st.session_state.profile_form_draft["resume_path"] = str(resume_save_path)
+            st.session_state.profile_form_draft["resume_path"] = resume_file.name  # just filename
             st.success(f"Resume parsed from {resume_file.name} — fields pre-filled below. Review and save.")
         except ImportError:
             st.info("Resume parser module not yet available. Fill fields manually.")
@@ -1716,6 +1716,8 @@ with st.sidebar:
     location_mode = st.selectbox("Location preference", ["United States / Remote only", "Global"], index=0)
     include_unknown_locations = st.checkbox("Include roles with unspecified locations", value=False)
     fast_mode = st.toggle("Fast matching mode", value=True, help="Uses listing metadata for faster results. Disable only when deeper job-description fetching is required.")
+    if (f1_filter or role_type_filter) and fast_mode:
+        st.markdown("<div class='cf-side-note' style='color:#F59E0B;border-color:rgba(245,158,11,.3)'>&#x26A0; F-1/role filters work best with Fast Mode OFF — job descriptions needed to detect clearance/sponsorship language.</div>", unsafe_allow_html=True)
     use_cache = st.toggle("Reuse recent career-site results", value=True)
     allow_unprofiled_scan = st.checkbox("Allow non-personalized search", value=False, help="Use only public job titles and search terms. Personalized match scoring requires resume, document, or website evidence.")
     if st.button("Clear cached job data", use_container_width=True):
