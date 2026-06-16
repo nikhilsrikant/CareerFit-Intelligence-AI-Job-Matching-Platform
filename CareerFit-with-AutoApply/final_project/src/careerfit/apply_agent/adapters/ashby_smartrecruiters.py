@@ -13,6 +13,11 @@ Key hooks:
   [data-testid="ApplicationFormField-github"]
   [data-testid="ApplicationFormField-portfolio"]
   [data-testid="FileInput-resume"]   (file upload)
+
+Note: fill_select_field() (from BaseAdapter) is available for any education-related
+dropdown (degree, major, field of study, education level). It fetches live options
+and uses the smart dropdown fallback engine (dropdown_matcher.py) to pick the best
+match — no manual option text required.
 """
 from __future__ import annotations
 
@@ -25,6 +30,9 @@ from careerfit.apply_agent.adapters.base import BaseAdapter, SELECTOR_TIMEOUT
 from careerfit.apply_agent.core.field_mapper import FieldMapper
 
 logger = logging.getLogger(__name__)
+
+# Keywords that indicate an education-related select/dropdown
+_EDU_KEYWORDS = ("degree", "major", "field of study", "education level", "highest education")
 
 
 class AshbyAdapter(BaseAdapter):
@@ -72,6 +80,9 @@ class AshbyAdapter(BaseAdapter):
             )
             await asyncio.sleep(1.0)
 
+        # Education dropdowns — use fill_select_field for smart fuzzy resolution
+        await self._fill_education_dropdowns(page, mapper)
+
         # Cover letter / generic label fill
         await self.fill_fields_by_label(page, mapper, title, company)
 
@@ -85,6 +96,27 @@ class AshbyAdapter(BaseAdapter):
             return {"status": "failed", "reason": "Submit button not found"}
         return {"status": "success", "reason": "submitted"}
 
+    async def _fill_education_dropdowns(self, page: Page, mapper: FieldMapper) -> None:
+        """
+        Use fill_select_field for any education-related dropdowns on the Ashby form.
+        Ashby typically renders these as React comboboxes with ARIA role=option items.
+        """
+        edu_selectors = [
+            ("[data-testid*='degree'] select, [data-testid*='degree']", "degree"),
+            ("[data-testid*='major'] select,  [data-testid*='major']",  "major"),
+            ("[data-testid*='fieldOfStudy'],   [data-testid*='field-of-study']", "major"),
+            ("[data-testid*='educationLevel'], [data-testid*='education-level']", "degree"),
+        ]
+        for selector, label in edu_selectors:
+            for sel in [s.strip() for s in selector.split(",")]:
+                try:
+                    el = page.locator(sel).first
+                    if await el.count() > 0:
+                        await self.fill_select_field(page, sel, label, mapper)
+                        break
+                except Exception:
+                    pass
+
 
 # ────────────────────────────────────────────────────────────────────────────────
 
@@ -94,6 +126,9 @@ class SmartRecruitersAdapter(BaseAdapter):
     SmartRecruiters (jobs.smartrecruiters.com/{slug}/{job_id})
     Uses a multi-step wizard similar to Workday but less complex.
     Key automation hooks: [data-testid] attributes and standard HTML names.
+
+    Note: fill_select_field() (from BaseAdapter) is available for any
+    education-related dropdown (degree, major, field of study, education level).
     """
     ats_name = "smartrecruiters"
 
@@ -145,7 +180,9 @@ class SmartRecruitersAdapter(BaseAdapter):
             await asyncio.sleep(1.5)
         await self.click_next(page, ["Next", "Continue"])
 
-        # Step 3: Questions
+        # Step 3: Questions (includes education dropdowns)
+        # Use fill_select_field for degree/major dropdowns before the generic pass
+        await self._fill_education_dropdowns(page, mapper)
         await self.fill_fields_by_label(page, mapper, title, company)
 
         dry_run = mapper._cfg.get("dry_run", True)
@@ -157,3 +194,23 @@ class SmartRecruitersAdapter(BaseAdapter):
         if not submitted:
             return {"status": "failed", "reason": "Submit button not found"}
         return {"status": "success", "reason": "submitted"}
+
+    async def _fill_education_dropdowns(self, page: Page, mapper: FieldMapper) -> None:
+        """
+        Use fill_select_field for education-related dropdowns on SmartRecruiters forms.
+        """
+        edu_selectors = [
+            ("select[name*='degree'], select[id*='degree']",         "degree"),
+            ("select[name*='major'], select[id*='major']",           "major"),
+            ("select[name*='fieldOfStudy'], select[id*='field']",    "major"),
+            ("select[name*='educationLevel'], select[id*='education']", "degree"),
+        ]
+        for selector, label in edu_selectors:
+            for sel in [s.strip() for s in selector.split(",")]:
+                try:
+                    el = page.locator(sel).first
+                    if await el.count() > 0:
+                        await self.fill_select_field(page, sel, label, mapper)
+                        break
+                except Exception:
+                    pass

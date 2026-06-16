@@ -45,6 +45,23 @@ def get_conn() -> sqlite3.Connection:
 # Schema bootstrap
 # ---------------------------------------------------------------------------
 
+def _migrate_profile_columns(conn: sqlite3.Connection) -> None:
+    """Add new columns to profile table if they don't exist yet (safe to run multiple times)."""
+    try:
+        cur = conn.execute("PRAGMA table_info(profile)")
+        existing = {row["name"] for row in cur.fetchall()}
+        for col_name, col_type in [
+            ("education_entries", "TEXT"),
+            ("experience_entries", "TEXT"),
+            ("skills", "TEXT"),
+        ]:
+            if col_name not in existing:
+                conn.execute(f"ALTER TABLE profile ADD COLUMN {col_name} {col_type}")
+        conn.commit()
+    except Exception:
+        pass  # Non-fatal: columns may already exist
+
+
 def init_db() -> None:
     """Create all tables if they do not already exist."""
     conn = get_conn()
@@ -122,6 +139,7 @@ def init_db() -> None:
             pass  # index already present or schema mismatch — non-fatal
 
         conn.commit()
+        _migrate_profile_columns(conn)
     finally:
         conn.close()
 
@@ -130,7 +148,9 @@ def init_db() -> None:
 # JSON helpers for list/dict fields stored as TEXT
 # ---------------------------------------------------------------------------
 
-_JSON_FIELDS = {"target_roles", "platforms"}
+_JSON_FIELDS = {"target_roles", "platforms", "education_entries", "experience_entries"}
+# NOTE: 'skills' is always saved as a plain comma-separated TEXT string, never JSON-encoded.
+# It is intentionally excluded from _JSON_FIELDS.
 
 
 def _encode_profile(data: dict) -> dict:

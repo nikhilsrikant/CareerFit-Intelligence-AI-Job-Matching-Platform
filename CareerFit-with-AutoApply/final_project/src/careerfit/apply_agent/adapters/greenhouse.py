@@ -149,7 +149,14 @@ class GreenhouseAdapter(BaseAdapter):
                     if ftype in ("input_text", "textarea"):
                         await self.fast_fill(page, sel, str(value))
                     elif ftype == "select":
-                        await self.select_option(page, sel, str(value))
+                        label_lower = label.lower()
+                        # Use smart dropdown resolution for education-related selects
+                        if any(kw in label_lower for kw in (
+                            "degree", "major", "field of study", "education level",
+                        )):
+                            await self.fill_select_field(page, sel, label, mapper)
+                        else:
+                            await self.select_option(page, sel, str(value))
 
     async def _fill_eeo(self, page: Page, mapper: FieldMapper):
         eeo_map = {

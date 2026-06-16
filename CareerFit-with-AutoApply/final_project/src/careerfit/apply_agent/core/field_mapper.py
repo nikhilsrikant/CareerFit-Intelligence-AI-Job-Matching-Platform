@@ -13,6 +13,12 @@ import re
 from difflib import SequenceMatcher
 from typing import Any, Optional
 
+# Optional import — gracefully absent during cold-start before the module is created
+try:
+    from careerfit.apply_agent.core.dropdown_matcher import resolve_dropdown_value as _resolve_dropdown_value
+except ImportError:
+    _resolve_dropdown_value = None  # type: ignore[assignment]
+
 
 # ────────────────────────────────────────────────────────────────────────────
 # Synonym groups — add more as you encounter new field labels in the wild
@@ -65,7 +71,9 @@ FIELD_SYNONYMS: dict[str, list[str]] = {
                             "how did you learn about this opening"],
     "university":          ["university", "school", "college", "institution", "alma mater"],
     "degree":              ["degree", "degree type", "highest education", "level of education",
-                            "field of study", "major"],
+                            "degree level", "degree earned"],
+    "major":               ["field of study", "major", "major field", "area of study",
+                            "program of study", "concentration", "specialization"],
     "graduation_year":     ["graduation year", "grad year", "year of graduation",
                             "expected graduation", "graduation date"],
     "gpa":                 ["gpa", "grade point average", "cumulative gpa"],
@@ -144,6 +152,31 @@ class FieldMapper:
         self._cache[cache_key] = value
         return value
 
+    def resolve_select(self, label: str, available_options: list[str]) -> "str | None":
+        """
+        Resolve the best available select option for *label* given a list of
+        *available_options* scraped from the live dropdown.
+
+        Priority:
+          1. Use resolve() to get the raw profile value for this label.
+          2. Case-insensitive exact check against available_options.
+          3. Fuzzy + fallback chain via dropdown_matcher.resolve_dropdown_value().
+        """
+        raw = self.resolve(label, field_type="select")
+        if not raw:
+            return None
+        raw_lower = str(raw).lower().strip()
+        # Case-insensitive exact check first
+        for opt in available_options:
+            if opt.lower().strip() == raw_lower:
+                return opt
+        # Fuzzy + fallback chain
+        try:
+            from careerfit.apply_agent.core.dropdown_matcher import resolve_dropdown_value
+            return resolve_dropdown_value(str(raw), available_options)
+        except ImportError:
+            return None
+
     def cover_letter_for_job(self, job_title: str, company: str) -> str:
         """
         Generate a tailored cover letter using runtime profile skills + applicant config.
@@ -211,6 +244,14 @@ class FieldMapper:
             f"{p.get('first_name', '')} {p.get('last_name', '')}".strip() or None
         )
 
+        # Pull most-recent education entry (index 0) for richer field data
+        _edu_entries = p.get("education_entries") or []
+        _first_edu = _edu_entries[0] if _edu_entries else {}
+
+        # Pull most-recent experience entry (index 0) for company / title
+        _exp_entries = p.get("experience_entries") or []
+        _first_exp = _exp_entries[0] if _exp_entries else {}
+
         mapping: dict[str, Any] = {
             "first_name":         p.get("first_name"),
             "last_name":          p.get("last_name"),
@@ -229,8 +270,8 @@ class FieldMapper:
             "resume":             self._resolve_resume_path(p.get("resume_path")),  # resolved path
             "cover_letter":       p.get("cover_letter_text") or "",
             "years_experience":   str(p.get("years_experience", "")),
-            "current_company":    p.get("current_company"),
-            "current_title":      p.get("current_title"),
+            "current_company":    _first_exp.get("company") or p.get("current_company"),
+            "current_title":      _first_exp.get("title") or p.get("current_title"),
             "start_date":         p.get("available_start_date", "Immediately"),
             "salary_expectation": p.get("salary_expectation", ""),
             "work_authorization": p.get("work_authorization", "Yes"),
@@ -240,10 +281,13 @@ class FieldMapper:
             "veteran_status":     p.get("veteran_status", "I am not a protected veteran"),
             "disability":         p.get("disability_status", "No, I don't have a disability"),
             "referral":           p.get("referral_source", "LinkedIn"),
-            "university":         p.get("university"),
-            "degree":             p.get("degree"),
-            "graduation_year":    str(p.get("graduation_year", "")),
-            "gpa":                str(p.get("gpa", "")),
+            "university":         _first_edu.get("school") or p.get("university"),
+            "degree":             (
+                _first_edu.get("degree") or _first_edu.get("major") or p.get("degree")
+            ),
+            "major":              _first_edu.get("major") or p.get("major"),
+            "graduation_year":    str(_first_edu.get("end_year") or p.get("graduation_year", "")),
+            "gpa":                str(_first_edu.get("gpa") or p.get("gpa", "")),
             "additional_info":    p.get("additional_info", ""),
         }
 

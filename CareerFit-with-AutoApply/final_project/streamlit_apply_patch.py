@@ -58,6 +58,12 @@ def run_continuous_apply(
     by threshold + F-1/role decisions + duplicate check, and applies sequentially.
     Updates progress in real time via st.empty().
     """
+    if threshold < 0.90:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            f"Threshold {threshold:.2f} below 0.90 minimum — forcing to 0.90"
+        )
+        threshold = 0.90
     import time as _time
     try:
         from careerfit import db as _db
