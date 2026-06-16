@@ -1587,7 +1587,7 @@ def render_profile_tab() -> None:
             if _edu_entries:
                 _fe = _edu_entries[0]
                 profile_data.setdefault("university", _fe.get("school", ""))
-                profile_data.setdefault("degree", _fe.get("major", "") or _fe.get("degree", ""))
+                profile_data.setdefault("degree", _fe.get("degree", "") or _fe.get("major", ""))
                 try:
                     profile_data.setdefault("gpa", float(_fe.get("gpa", 0) or 0))
                 except Exception:
@@ -1669,8 +1669,8 @@ def render_autoapply_tab() -> None:
         delay_between_secs = st.slider("Delay between applications (seconds)", 10, 120, 45, key="ca_delay")
         max_applications   = st.number_input("Max applications per run", 1, 200, 50, key="ca_max_apps")
     with ca2:
-        apply_threshold    = st.slider("Minimum match score to apply", 0.85, 0.99, 0.90, 0.01, key="ca_threshold",
-                                        help="Minimum 85% enforced. 90% recommended for quality applications.")
+        apply_threshold    = st.slider("Minimum match score to apply", 0.90, 0.99, 0.90, 0.01, key="ca_threshold",
+                                        help="90% minimum enforced for quality applications.")
         dry_run_continuous = st.toggle("Dry run (fill forms, do not submit)", value=True, key="ca_dry_run")
         headless_cont      = st.toggle("Headless browser", value=True, key="ca_headless")
     st.markdown("</div>", unsafe_allow_html=True)

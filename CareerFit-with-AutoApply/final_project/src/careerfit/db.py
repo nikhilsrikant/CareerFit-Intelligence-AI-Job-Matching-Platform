@@ -149,6 +149,8 @@ def init_db() -> None:
 # ---------------------------------------------------------------------------
 
 _JSON_FIELDS = {"target_roles", "platforms", "education_entries", "experience_entries"}
+# NOTE: 'skills' is always saved as a plain comma-separated TEXT string, never JSON-encoded.
+# It is intentionally excluded from _JSON_FIELDS.
 
 
 def _encode_profile(data: dict) -> dict:

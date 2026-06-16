@@ -304,13 +304,18 @@ def resolve_dropdown_value(
     chain: Optional[list[str]] = DEGREE_FALLBACK_CHAINS.get(desired)
 
     if chain is None:
-        # Partial key matching (normalised substring)
+        # Partial key matching (normalised substring).
+        # Sort candidates by descending key length to prefer the most-specific
+        # match regardless of insertion order in DEGREE_FALLBACK_CHAINS.
         norm_desired = _normalize(desired)
-        for key, key_chain in DEGREE_FALLBACK_CHAINS.items():
-            norm_key = _normalize(key)
-            if norm_key in norm_desired or norm_desired in norm_key:
-                chain = key_chain
-                break
+        candidates = [
+            (key, key_chain)
+            for key, key_chain in DEGREE_FALLBACK_CHAINS.items()
+            if _normalize(key) in norm_desired or norm_desired in _normalize(key)
+        ]
+        candidates.sort(key=lambda kc: len(kc[0]), reverse=True)
+        if candidates:
+            chain = candidates[0][1]
 
     if chain is None:
         return None

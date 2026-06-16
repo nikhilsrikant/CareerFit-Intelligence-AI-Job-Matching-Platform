@@ -152,18 +152,24 @@ class WorkdayAdapter(BaseAdapter):
         # data-automation-id hooks used by Workday's education section:
         #   educationSection--degreeType  → degree level (e.g. Master of Science)
         #   educationSection--fieldOfStudy → major/field (e.g. Data Science)
-        await self.fill_select_field(
-            page,
-            "[data-automation-id*='degreeType'] select, [data-automation-id*='degree'] select",
-            "degree",
-            mapper,
-        )
-        await self.fill_select_field(
-            page,
-            "[data-automation-id*='fieldOfStudy'] select, [data-automation-id*='major'] select",
-            "major",
-            mapper,
-        )
+        # Guard with count() before calling fill_select_field to avoid burning
+        # SELECTOR_TIMEOUT (8 s) on jobs whose education section is absent.
+        degree_sel = page.locator("[data-automation-id='degreeType']")
+        if await degree_sel.count() > 0:
+            await self.fill_select_field(
+                page,
+                "[data-automation-id*='degreeType'] select, [data-automation-id*='degree'] select",
+                "degree",
+                mapper,
+            )
+        major_sel = page.locator("[data-automation-id='fieldOfStudy']")
+        if await major_sel.count() > 0:
+            await self.fill_select_field(
+                page,
+                "[data-automation-id*='fieldOfStudy'] select, [data-automation-id*='major'] select",
+                "major",
+                mapper,
+            )
 
     async def _fill_generic(self, page: Page, mapper: FieldMapper,
                              title: str, company: str):
