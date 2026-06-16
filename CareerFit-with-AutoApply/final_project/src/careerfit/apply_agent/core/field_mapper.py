@@ -132,8 +132,15 @@ class FieldMapper:
         profile_key = self._match_key(key_label)
         # Try structured profile first; fall back to Q&A only when profile has no value
         value = self._get_value(profile_key, field_type) if profile_key else None
-        if not value:
+        if value is None:
+            # Try QA with the raw label first, then with every synonym for the matched key
+            # so that e.g. a QA pattern "current company" fires for label "current employer"
             value = self.resolve_qa(key_label)
+            if value is None and profile_key:
+                for syn in FIELD_SYNONYMS.get(profile_key, []):
+                    value = self.resolve_qa(syn)
+                    if value is not None:
+                        break
         self._cache[cache_key] = value
         return value
 
