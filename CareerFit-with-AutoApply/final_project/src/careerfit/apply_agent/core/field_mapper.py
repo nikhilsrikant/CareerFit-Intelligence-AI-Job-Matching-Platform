@@ -71,7 +71,9 @@ FIELD_SYNONYMS: dict[str, list[str]] = {
                             "how did you learn about this opening"],
     "university":          ["university", "school", "college", "institution", "alma mater"],
     "degree":              ["degree", "degree type", "highest education", "level of education",
-                            "field of study", "major"],
+                            "degree level", "degree earned"],
+    "major":               ["field of study", "major", "major field", "area of study",
+                            "program of study", "concentration", "specialization"],
     "graduation_year":     ["graduation year", "grad year", "year of graduation",
                             "expected graduation", "graduation date"],
     "gpa":                 ["gpa", "grade point average", "cumulative gpa"],
@@ -281,7 +283,7 @@ class FieldMapper:
             "referral":           p.get("referral_source", "LinkedIn"),
             "university":         _first_edu.get("school") or p.get("university"),
             "degree":             (
-                _first_edu.get("major") or _first_edu.get("degree") or p.get("degree")
+                _first_edu.get("degree") or _first_edu.get("major") or p.get("degree")
             ),
             "major":              _first_edu.get("major") or p.get("major"),
             "graduation_year":    str(_first_edu.get("end_year") or p.get("graduation_year", "")),
