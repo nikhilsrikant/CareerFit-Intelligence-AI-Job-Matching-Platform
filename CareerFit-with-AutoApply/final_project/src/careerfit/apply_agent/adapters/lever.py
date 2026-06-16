@@ -9,6 +9,11 @@ Field IDs follow a consistent pattern:
   #urls[GitHub], #urls[Portfolio], #cards[cover letter], textarea (cover letter)
 
 Resume: Lever has a dedicated "Upload Resume" button → hidden file input.
+
+Note: fill_select_field() (from BaseAdapter) is available for any education-related
+dropdown (degree, major, field of study, education level). It fetches live options
+and uses the smart dropdown fallback engine (dropdown_matcher.py) to pick the best
+match — no manual option text required.
 """
 from __future__ import annotations
 
@@ -90,6 +95,7 @@ class LeverAdapter(BaseAdapter):
             await self.fast_fill(page, "textarea[name='comments'], #cover-letter", cl)
 
         # ── 6. Custom / additional questions ───────────────────────────────
+        await self._fill_education_dropdowns(page, mapper)
         await self.fill_fields_by_label(page, mapper, title, company)
 
         # ── 7. EEO / demographic checkboxes ────────────────────────────────
@@ -116,6 +122,28 @@ class LeverAdapter(BaseAdapter):
             pass  # Some Lever boards redirect without a selector
 
         return {"status": "success", "reason": "submitted"}
+
+    async def _fill_education_dropdowns(self, page: Page, mapper: FieldMapper) -> None:
+        """
+        Use fill_select_field for any education-related dropdowns on Lever forms.
+        Lever occasionally includes degree/major fields in custom question sections.
+        fill_select_field queries live options then fuzzy-matches via dropdown_matcher.
+        """
+        edu_selectors = [
+            ("select[name*='degree'], select[id*='degree']",       "degree"),
+            ("select[name*='major'],  select[id*='major']",        "major"),
+            ("select[name*='field'],  select[id*='fieldOfStudy']", "major"),
+            ("select[name*='education']",                          "degree"),
+        ]
+        for selector, label in edu_selectors:
+            for sel in [s.strip() for s in selector.split(",")]:
+                try:
+                    el = page.locator(sel).first
+                    if await el.count() > 0:
+                        await self.fill_select_field(page, sel, label, mapper)
+                        break
+                except Exception:
+                    pass
 
     async def _fill_eeo(self, page: Page, mapper: FieldMapper):
         eeo = {

@@ -158,6 +158,80 @@ class BaseAdapter(ABC):
             logger.debug(f"[{self.ats_name}] select_option: {e}")
         return False
 
+    async def fill_select_field(self, page: Page, selector: str, label: str,
+                                mapper: FieldMapper) -> bool:
+        """
+        Query all option texts from a select element, use mapper.resolve_select()
+        to pick the best match via fuzzy + fallback chains, then select it.
+
+        Handles both native <select> elements and React/custom dropdowns that
+        expose options via ARIA role="option".
+
+        Returns True if a matching option was successfully selected.
+        """
+        try:
+            el = page.locator(selector).first
+            await el.wait_for(state="visible", timeout=SELECTOR_TIMEOUT)
+            tag = await el.evaluate("el => el.tagName.toLowerCase()")
+
+            if tag == "select":
+                options = await el.evaluate(
+                    "el => Array.from(el.options).map(o => o.text.trim()).filter(t => t)"
+                )
+            else:
+                # React / custom dropdown: click to open, then collect option texts
+                await el.click()
+                await asyncio.sleep(0.3)
+                opt_els = page.get_by_role("option")
+                count = await opt_els.count()
+                options = [
+                    (await opt_els.nth(i).text_content() or "")
+                    for i in range(count)
+                ]
+                options = [o.strip() for o in options if o.strip()]
+                if not options:
+                    await page.keyboard.press("Escape")
+                    return False
+
+            best = mapper.resolve_select(label, options)
+            if not best:
+                if tag != "select":
+                    await page.keyboard.press("Escape")
+                return False
+
+            if tag == "select":
+                # Select by option text via JS so change events fire correctly
+                await el.evaluate(
+                    "(el, text) => {"
+                    "  Array.from(el.options).forEach(o => {"
+                    "    if (o.text.trim() === text) o.selected = true;"
+                    "  });"
+                    "  el.dispatchEvent(new Event('change', {bubbles: true}));"
+                    "}",
+                    best,
+                )
+            else:
+                # Click the matching option in the already-open React dropdown
+                opt = page.get_by_role("option", name=best)
+                if await opt.count() > 0:
+                    await opt.first.click()
+                else:
+                    # Fallback: find by exact text_content match
+                    opts = page.get_by_role("option")
+                    cnt = await opts.count()
+                    for i in range(cnt):
+                        txt = (await opts.nth(i).text_content() or "").strip()
+                        if txt == best:
+                            await opts.nth(i).click()
+                            break
+
+            await asyncio.sleep(REACT_SETTLE_MS / 1000)
+            return True
+
+        except Exception as exc:
+            logger.debug(f"[{self.ats_name}] fill_select_field({label}): {exc}")
+            return False
+
     async def upload_file(self, page: Page, selector: str, file_path: str) -> bool:
         """Attach a file to a file input element."""
         if not file_path or not Path(file_path).exists():

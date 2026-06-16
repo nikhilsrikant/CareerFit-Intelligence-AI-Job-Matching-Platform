@@ -147,6 +147,24 @@ class WorkdayAdapter(BaseAdapter):
         if linkedin:
             await self._wd_fill("linkedIn", linkedin, page)
 
+        # Education dropdowns — degree type and field of study
+        # fill_select_field queries live options then fuzzy-matches via dropdown_matcher
+        # data-automation-id hooks used by Workday's education section:
+        #   educationSection--degreeType  → degree level (e.g. Master of Science)
+        #   educationSection--fieldOfStudy → major/field (e.g. Data Science)
+        await self.fill_select_field(
+            page,
+            "[data-automation-id*='degreeType'] select, [data-automation-id*='degree'] select",
+            "degree",
+            mapper,
+        )
+        await self.fill_select_field(
+            page,
+            "[data-automation-id*='fieldOfStudy'] select, [data-automation-id*='major'] select",
+            "major",
+            mapper,
+        )
+
     async def _fill_generic(self, page: Page, mapper: FieldMapper,
                              title: str, company: str):
         """Generic label-driven fill for Workday's custom question steps."""
