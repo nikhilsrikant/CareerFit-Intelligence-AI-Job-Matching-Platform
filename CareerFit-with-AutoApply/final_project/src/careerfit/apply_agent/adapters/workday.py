@@ -158,7 +158,7 @@ class WorkdayAdapter(BaseAdapter):
         if await degree_sel.count() > 0:
             await self.fill_select_field(
                 page,
-                "[data-automation-id*='degreeType'] select, [data-automation-id*='degree'] select",
+                "[data-automation-id='degreeType']",
                 "degree",
                 mapper,
             )
@@ -166,7 +166,7 @@ class WorkdayAdapter(BaseAdapter):
         if await major_sel.count() > 0:
             await self.fill_select_field(
                 page,
-                "[data-automation-id*='fieldOfStudy'] select, [data-automation-id*='major'] select",
+                "[data-automation-id='fieldOfStudy']",
                 "major",
                 mapper,
             )

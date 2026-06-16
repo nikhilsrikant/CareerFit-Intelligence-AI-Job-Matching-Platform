@@ -197,6 +197,8 @@ class BaseAdapter(ABC):
             if not best:
                 if tag != "select":
                     await page.keyboard.press("Escape")
+                    await asyncio.sleep(0.1)
+                    await page.keyboard.press("Tab")
                 return False
 
             if tag == "select":
