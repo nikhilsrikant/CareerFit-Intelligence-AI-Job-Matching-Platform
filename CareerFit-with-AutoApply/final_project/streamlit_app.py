@@ -811,6 +811,8 @@ def init_state() -> None:
         "db_profile": {},
         "profile_form_draft": {},
         "_db_loaded": False,
+        "education_entries": [],
+        "experience_entries": [],
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -828,6 +830,18 @@ def init_state() -> None:
             st.session_state["_db_loaded"] = True
     except Exception:
         pass
+    # Initialize education/experience entries from saved profile
+    _prof_for_edu = st.session_state.get("db_profile", {})
+    if not st.session_state.get("education_entries"):
+        _saved_edu = _prof_for_edu.get("education_entries", [])
+        if isinstance(_saved_edu, list) and _saved_edu:
+            st.session_state.education_entries = _saved_edu
+        elif _prof_for_edu.get("university") or _prof_for_edu.get("degree"):
+            st.session_state.education_entries = [{"school": _prof_for_edu.get("university", ""), "degree": _prof_for_edu.get("degree", ""), "major": "", "gpa": str(_prof_for_edu.get("gpa", "") or ""), "start_year": "", "end_year": str(_prof_for_edu.get("graduation_year", "") or ""), "is_current": False}]
+    if not st.session_state.get("experience_entries"):
+        _saved_exp = _prof_for_edu.get("experience_entries", [])
+        if isinstance(_saved_exp, list) and _saved_exp:
+            st.session_state.experience_entries = _saved_exp
 
 
 def log(message: str) -> None:
@@ -962,9 +976,22 @@ def render_match_card(m: JobMatch, threshold: float, applied_job_ids: "set[str] 
     concerns = "".join(f"<span class='cf-tag'>{escape(s)}</span>" for s in m.gaps_or_concerns[:3])
     url = escape(m.canonical_url or "#")
     profile_ready = bool(getattr(m, "profile_ready", False))
-    score_label = f"{score}%" if profile_ready else f"{score}%<br/><span style='font-size:10px;font-weight:800'>search score</span>"
     score_css = score_class(m.score, threshold) if profile_ready else "cf-score-low"
     source_label = escape(m.best_document or ("Profile not built" if not profile_ready else "Combined profile"))
+    # Build SVG ring
+    _arc = round((score / 100) * 163.36, 2)
+    _ring_color = "#10B981" if score >= 90 else ("#F59E0B" if score >= 70 else "#F43F5E")
+    _search_note = "" if profile_ready else "<tspan x='32' dy='10' font-size='7' font-weight='600' fill='#94A3B8'>search</tspan>"
+    _score_svg = (
+        "<svg width='64' height='64' viewBox='0 0 64 64' xmlns='http://www.w3.org/2000/svg'>"
+        "<circle cx='32' cy='32' r='26' fill='none' stroke='#E2E8F0' stroke-width='6'/>"
+        f"<circle cx='32' cy='32' r='26' fill='none' stroke='{_ring_color}' stroke-width='6' "
+        f"stroke-dasharray='{_arc} 163.36' stroke-linecap='round' transform='rotate(-90 32 32)'/>"
+        f"<text x='32' y='36' text-anchor='middle' font-size='13' font-weight='800' "
+        f"fill='{_ring_color}' font-family='DM Sans,sans-serif'>{score}%"
+        + _search_note +
+        "</text></svg>"
+    )
     st.markdown(
         f"""
         <div class='cf-job'>
@@ -978,7 +1005,7 @@ def render_match_card(m: JobMatch, threshold: float, applied_job_ids: "set[str] 
                 </div>
               </div>
             </div>
-            <div class='cf-score {score_css}'>{score_label}</div>
+            {_score_svg}
           </div>
           <div class='cf-progress'><span style='width:{widths}%'></span></div>
           <div class='cf-muted'><b style='color:inherit'>Role alignment:</b> {escape(m.role_family or 'General fit')}</div>
@@ -1006,6 +1033,10 @@ def render_match_card(m: JobMatch, threshold: float, applied_job_ids: "set[str] 
         _badges += "<span class='cf-badge-f1-ok'>&#x1F7E2; F-1 Friendly</span> "
     if _f1_blocked:
         _badges += "<span class='cf-badge-f1-skip'>&#x1F534; Clearance/No Sponsor</span> "
+    # Auto-Apply Eligible badge
+    _auto_eligible = (m.score >= 0.90 and m.decision not in ("f1_filtered", "role_filtered") and not _already)
+    if _auto_eligible:
+        _badges += "<span style='background:#DCFCE7;color:#166534;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700'>&#x26a1; Auto-Apply Eligible</span> "
     if _badges:
         st.markdown(f"<div style='margin-top:8px'>{_badges}</div>", unsafe_allow_html=True)
     if not _already:
@@ -1218,6 +1249,46 @@ def render_profile_tab() -> None:
         </div>
     """, unsafe_allow_html=True)
 
+    # ── Profile Card ──────────────────────────────────────────────────────
+    db_profile = st.session_state.get("db_profile", {})
+    if db_profile.get("first_name") and db_profile.get("last_name"):
+        _fn = db_profile.get("first_name", "")
+        _ln = db_profile.get("last_name", "")
+        _initials = (_fn[:1] + _ln[:1]).upper()
+        _edu_list = db_profile.get("education_entries") or []
+        _edu0 = _edu_list[0] if _edu_list else {}
+        _exp_list = db_profile.get("experience_entries") or []
+        _exp0 = _exp_list[0] if _exp_list else {}
+        _edu_str = (
+            (_edu0.get("major") or _edu0.get("degree") or "") + " @ " + (_edu0.get("school") or "")
+            if (_edu0.get("school") or _edu0.get("degree") or _edu0.get("major"))
+            else (db_profile.get("degree", "") + " @ " + db_profile.get("university", "") if db_profile.get("university") else "")
+        )
+        _exp_str = (_exp0.get("title", "") + " at " + _exp0.get("company", "")) if _exp0.get("company") else ""
+        _visa = db_profile.get("visa_status", "")
+        _visa_badge = (
+            "<span style='background:#DBEAFE;color:#1D4ED8;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700'>"
+            + _visa + "</span>"
+        ) if _visa else ""
+        _exp_html = ("<div style='font-size:14px;color:#475569;margin-bottom:2px'>" + _exp_str + "</div>") if _exp_str else ""
+        _edu_html = ("<div style='font-size:13px;color:#64748B'>" + _edu_str + "</div>") if _edu_str else ""
+        st.markdown(
+            "<div style='background:#FFFFFF;border:1px solid #E2E8F0;border-radius:16px;padding:20px 24px;"
+            "margin-bottom:20px;display:flex;gap:20px;align-items:flex-start;"
+            "box-shadow:0 1px 4px rgba(15,23,42,.06)'>"
+            "<div style='width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#2563EB,#06B6D4);"
+            "display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;color:#fff;flex-shrink:0'>"
+            + _initials +
+            "</div>"
+            "<div style='flex:1'>"
+            "<div style='font-size:20px;font-weight:700;color:#0C1322;margin-bottom:4px'>"
+            + _fn + " " + _ln + " " + _visa_badge +
+            "</div>"
+            + _exp_html + _edu_html +
+            "</div></div>",
+            unsafe_allow_html=True,
+        )
+
     # ── Resume Upload & Parse ──────────────────────────────────────────────
     st.markdown("<div class='cf-profile-section'><h4>&#x1F4C4; Upload Resume to Auto-Fill</h4>", unsafe_allow_html=True)
     resume_file = st.file_uploader(
@@ -1281,24 +1352,95 @@ def render_profile_tab() -> None:
 
     # ── Education ─────────────────────────────────────────────────────────
     st.markdown("<div class='cf-profile-section'><h4>&#x1F393; Education</h4>", unsafe_allow_html=True)
-    ed1, ed2 = st.columns(2)
-    with ed1:
-        university = st.text_input("University / College", value=prof.get("university",""), key="pf_university")
-    with ed2:
-        degree = st.text_input("Degree & Major", value=prof.get("degree",""), placeholder="B.S. Computer Science", key="pf_degree")
-    ed3, ed4 = st.columns(2)
-    with ed3:
-        try:
-            _gy_default = int(prof.get("graduation_year") or 2026)
-        except (ValueError, TypeError):
-            _gy_default = 2026
-        graduation_year = st.number_input("Expected Graduation Year", min_value=2024, max_value=2030, value=_gy_default, step=1, key="pf_grad_year")
-    with ed4:
-        try:
-            _gpa_default = float(prof.get("gpa") or 0.0)
-        except (ValueError, TypeError):
-            _gpa_default = 0.0
-        gpa = st.number_input("GPA (0.0-4.0)", min_value=0.0, max_value=4.0, value=_gpa_default, step=0.01, format="%.2f", key="pf_gpa")
+    # Initialize if not in session state
+    if not st.session_state.get("education_entries"):
+        _saved_edu = prof.get("education_entries", [])
+        if isinstance(_saved_edu, list) and _saved_edu:
+            st.session_state.education_entries = _saved_edu
+        elif prof.get("university") or prof.get("degree"):
+            st.session_state.education_entries = [{"school": prof.get("university", ""), "degree": prof.get("degree", ""), "major": "", "gpa": str(prof.get("gpa", "") or ""), "start_year": "", "end_year": str(prof.get("graduation_year", "") or ""), "is_current": False}]
+        else:
+            st.session_state.education_entries = []
+    for i, _entry in enumerate(list(st.session_state.education_entries)):
+        _hc, _dc = st.columns([6, 1])
+        with _hc:
+            st.markdown(f"<div style='font-weight:700;color:#1E293B;font-size:14px;margin-bottom:4px'>Education #{i+1}</div>", unsafe_allow_html=True)
+        with _dc:
+            if st.button("\u2715", key=f"del_edu_{i}", help="Remove this education entry"):
+                st.session_state.education_entries.pop(i)
+                st.rerun()
+        _e1, _e2 = st.columns(2)
+        with _e1:
+            st.text_input("School / University", value=_entry.get("school", ""), key=f"edu_school_{i}")
+        with _e2:
+            st.text_input("Degree", value=_entry.get("degree", ""), placeholder="B.E. / M.S. / B.S.", key=f"edu_degree_{i}")
+        _e3, _e4, _e5 = st.columns(3)
+        with _e3:
+            st.text_input("Major / Field of Study", value=_entry.get("major", ""), placeholder="Data Science", key=f"edu_major_{i}")
+        with _e4:
+            st.text_input("GPA", value=str(_entry.get("gpa", "")), placeholder="3.8", key=f"edu_gpa_{i}")
+        with _e5:
+            st.checkbox("Currently enrolled", value=bool(_entry.get("is_current", False)), key=f"edu_current_{i}")
+        _e6, _e7 = st.columns(2)
+        with _e6:
+            st.text_input("Start Year", value=str(_entry.get("start_year", "")), placeholder="2021", key=f"edu_start_{i}")
+        with _e7:
+            st.text_input("End Year / Expected", value=str(_entry.get("end_year", "")), placeholder="2023", key=f"edu_end_{i}")
+        st.markdown("<hr style='border:none;border-top:1px solid #E2E8F0;margin:10px 0'>", unsafe_allow_html=True)
+    if st.button("\uff0b Add Education", key="add_edu_btn"):
+        st.session_state.education_entries.append({"school": "", "degree": "", "major": "", "gpa": "", "start_year": "", "end_year": "", "is_current": False})
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Work Experience ────────────────────────────────────────────────────
+    st.markdown("<div class='cf-profile-section'><h4>&#x1F4BC; Work Experience</h4>", unsafe_allow_html=True)
+    if not st.session_state.get("experience_entries"):
+        _saved_exp = prof.get("experience_entries", [])
+        if isinstance(_saved_exp, list) and _saved_exp:
+            st.session_state.experience_entries = _saved_exp
+        else:
+            st.session_state.experience_entries = []
+    for i, _xentry in enumerate(list(st.session_state.experience_entries)):
+        _xhc, _xdc = st.columns([6, 1])
+        with _xhc:
+            st.markdown(f"<div style='font-weight:700;color:#1E293B;font-size:14px;margin-bottom:4px'>Experience #{i+1}</div>", unsafe_allow_html=True)
+        with _xdc:
+            if st.button("\u2715", key=f"del_exp_{i}", help="Remove this experience entry"):
+                st.session_state.experience_entries.pop(i)
+                st.rerun()
+        _x1, _x2 = st.columns(2)
+        with _x1:
+            st.text_input("Company", value=_xentry.get("company", ""), key=f"exp_company_{i}")
+        with _x2:
+            st.text_input("Job Title", value=_xentry.get("title", ""), placeholder="Software Engineer Intern", key=f"exp_title_{i}")
+        _x3, _x4, _x5 = st.columns(3)
+        with _x3:
+            st.text_input("Location", value=_xentry.get("location", ""), placeholder="San Francisco, CA", key=f"exp_location_{i}")
+        with _x4:
+            st.text_input("Start Date", value=_xentry.get("start_date", ""), placeholder="MM/YYYY", key=f"exp_start_{i}")
+        with _x5:
+            st.checkbox("Current role", value=bool(_xentry.get("is_current", False)), key=f"exp_current_{i}")
+        st.text_input("End Date", value=_xentry.get("end_date", ""), placeholder="MM/YYYY or Present", key=f"exp_end_{i}")
+        st.text_area("Description", value=_xentry.get("description", ""), height=80, placeholder="Describe key responsibilities and achievements...", key=f"exp_desc_{i}")
+        st.markdown("<hr style='border:none;border-top:1px solid #E2E8F0;margin:10px 0'>", unsafe_allow_html=True)
+    if st.button("\uff0b Add Experience", key="add_exp_btn"):
+        st.session_state.experience_entries.append({"company": "", "title": "", "location": "", "start_date": "", "end_date": "", "is_current": False, "description": ""})
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Skills ────────────────────────────────────────────────────────────
+    st.markdown("<div class='cf-profile-section'><h4>&#x1F527; Skills</h4>", unsafe_allow_html=True)
+    _skills_val = prof.get("skills", "")
+    if isinstance(_skills_val, list):
+        _skills_val = ", ".join(_skills_val)
+    skills_text = st.text_area(
+        "Skills (comma-separated or one per line)",
+        value=_skills_val,
+        height=100,
+        placeholder="Python, SQL, PyTorch, React, AWS, Machine Learning...",
+        key="pf_skills",
+        help="Used for cover letter generation and application auto-fill.",
+    )
     st.markdown("</div>", unsafe_allow_html=True)
 
     # ── Visa & Work Authorization ──────────────────────────────────────────
@@ -1395,6 +1537,30 @@ def render_profile_tab() -> None:
             st.error("First name and email are required.")
         else:
             _target_roles_list = [r.strip() for r in target_roles_text.splitlines() if r.strip()]
+            # Collect education entries from indexed session state keys
+            _edu_entries = []
+            for i in range(len(st.session_state.get("education_entries", []))):
+                _edu_entries.append({
+                    "school": st.session_state.get(f"edu_school_{i}", ""),
+                    "degree": st.session_state.get(f"edu_degree_{i}", ""),
+                    "major": st.session_state.get(f"edu_major_{i}", ""),
+                    "gpa": st.session_state.get(f"edu_gpa_{i}", ""),
+                    "start_year": st.session_state.get(f"edu_start_{i}", ""),
+                    "end_year": st.session_state.get(f"edu_end_{i}", ""),
+                    "is_current": st.session_state.get(f"edu_current_{i}", False),
+                })
+            # Collect experience entries from indexed session state keys
+            _exp_entries = []
+            for i in range(len(st.session_state.get("experience_entries", []))):
+                _exp_entries.append({
+                    "company": st.session_state.get(f"exp_company_{i}", ""),
+                    "title": st.session_state.get(f"exp_title_{i}", ""),
+                    "location": st.session_state.get(f"exp_location_{i}", ""),
+                    "start_date": st.session_state.get(f"exp_start_{i}", ""),
+                    "end_date": st.session_state.get(f"exp_end_{i}", ""),
+                    "is_current": st.session_state.get(f"exp_current_{i}", False),
+                    "description": st.session_state.get(f"exp_desc_{i}", ""),
+                })
             profile_data = {
                 "first_name": first_name, "last_name": last_name,
                 "email": email, "phone": phone,
@@ -1403,9 +1569,6 @@ def render_profile_tab() -> None:
                 "linkedin_url": linkedin_url, "github_url": github_url,
                 "portfolio_url": portfolio_url,
                 "visa_status": visa_status,
-                "graduation_year": int(graduation_year),
-                "gpa": float(gpa),
-                "university": university, "degree": degree,
                 "target_roles": _target_roles_list,
                 "years_experience": int(years_experience),
                 "available_start_date": available_start_date,
@@ -1414,13 +1577,31 @@ def render_profile_tab() -> None:
                 "requires_sponsorship": requires_sponsorship,
                 "referral_source": referral_source,
                 "cover_letter_text": cover_letter_text,
-                "resume_path": prof.get("resume_path",""),
+                "resume_path": prof.get("resume_path", ""),
                 "platforms": platform_creds,
+                "education_entries": _edu_entries,
+                "experience_entries": _exp_entries,
+                "skills": st.session_state.get("pf_skills", "").strip(),
             }
+            # Backward-compat flat fields from first education entry
+            if _edu_entries:
+                _fe = _edu_entries[0]
+                profile_data.setdefault("university", _fe.get("school", ""))
+                profile_data.setdefault("degree", _fe.get("major", "") or _fe.get("degree", ""))
+                try:
+                    profile_data.setdefault("gpa", float(_fe.get("gpa", 0) or 0))
+                except Exception:
+                    pass
+                try:
+                    profile_data.setdefault("graduation_year", int(_fe.get("end_year", 2026) or 2026))
+                except Exception:
+                    pass
             try:
                 _db.save_profile(profile_data)
                 st.session_state.db_profile = profile_data
                 st.session_state.profile_form_draft = profile_data
+                st.session_state.education_entries = _edu_entries
+                st.session_state.experience_entries = _exp_entries
                 st.session_state["_db_loaded"] = False  # force reload on next render
                 st.success("Profile saved successfully! Switching to Job Matching tab.")
                 st.session_state.active_tab = "matching"
@@ -1488,8 +1669,8 @@ def render_autoapply_tab() -> None:
         delay_between_secs = st.slider("Delay between applications (seconds)", 10, 120, 45, key="ca_delay")
         max_applications   = st.number_input("Max applications per run", 1, 200, 50, key="ca_max_apps")
     with ca2:
-        apply_threshold    = st.slider("Minimum match score to apply", 0.70, 0.99, 0.90, 0.01, key="ca_threshold",
-                                        help="90% recommended for quality applications")
+        apply_threshold    = st.slider("Minimum match score to apply", 0.85, 0.99, 0.90, 0.01, key="ca_threshold",
+                                        help="Minimum 85% enforced. 90% recommended for quality applications.")
         dry_run_continuous = st.toggle("Dry run (fill forms, do not submit)", value=True, key="ca_dry_run")
         headless_cont      = st.toggle("Headless browser", value=True, key="ca_headless")
     st.markdown("</div>", unsafe_allow_html=True)
@@ -1769,6 +1950,36 @@ with tab_cols[2]:
 st.markdown("<hr style='border:none;border-top:1px solid #E2E8F0;margin:4px 0 20px'>", unsafe_allow_html=True)
 
 if st.session_state.active_tab == "matching":
+    # Agent Status Bar — KPI tiles
+    try:
+        from careerfit import db as _status_db
+        _conn = _status_db.get_conn()
+        _today_count = _conn.execute("SELECT COUNT(*) FROM applied_jobs WHERE date(applied_at)=date('now')").fetchone()[0]
+        _total_count = _conn.execute("SELECT COUNT(*) FROM applied_jobs").fetchone()[0]
+        _conn.close()
+    except Exception:
+        _today_count = 0
+        _total_count = 0
+    _jobs_scanned = len(st.session_state.get("jobs", []))
+    _best_match = max((m.score for m in st.session_state.get("matches", [])), default=0)
+    _best_pct = f"{int(_best_match * 100)}%" if _best_match else "--"
+    _kpi_cols = st.columns(4)
+    _kpi_data = [
+        ("Applied Today", str(_today_count), "#10B981"),
+        ("Total Applied", str(_total_count), "#2563EB"),
+        ("Jobs Scanned", str(_jobs_scanned), "#7C3AED"),
+        ("Best Match", _best_pct, "#F59E0B"),
+    ]
+    for _kc, (_label, _val, _color) in zip(_kpi_cols, _kpi_data):
+        with _kc:
+            st.markdown(
+                f"<div style='background:linear-gradient(135deg,#0A1628,#0D1F3C);border-radius:14px;"
+                f"padding:18px 20px;border-top:3px solid {_color};margin-bottom:16px'>"
+                f"<div style='font-size:26px;font-weight:800;color:#FFFFFF;margin-bottom:4px'>{_val}</div>"
+                f"<div style='font-size:12px;color:#94A3B8;letter-spacing:.04em'>{_label}</div></div>",
+                unsafe_allow_html=True,
+            )
+
     # Status metrics
     high_count = len([m for m in st.session_state.matches if m.score >= threshold])
     profile_ready = bool(st.session_state.profile.combined_text.strip())
