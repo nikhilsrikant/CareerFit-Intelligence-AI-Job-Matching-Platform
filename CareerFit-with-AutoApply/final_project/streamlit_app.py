@@ -19,6 +19,9 @@ from typing import Iterable
 
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
+# Ensure both ROOT (for streamlit_apply_patch) and SRC (for careerfit.*) are on sys.path
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
@@ -59,12 +62,17 @@ except Exception:
     _fetch_workday_public = None
     _convert_to_normalized_job = None
     _JOB_BOARD_AVAILABLE = False
-from streamlit_apply_patch import (
-    init_apply_session_state,
-    render_apply_queue_panel,
-    render_apply_button,
-    run_apply_queue,
-)
+try:
+    from streamlit_apply_patch import (
+        init_apply_session_state,
+        render_apply_queue_panel,
+        render_apply_button,
+        run_apply_queue,
+    )
+except Exception as _patch_err:
+    import streamlit as _st_err
+    _st_err.error(f"Could not load streamlit_apply_patch: {_patch_err}")
+    raise
 
 APP_TITLE = "CareerFit Studio"
 DEFAULT_THRESHOLD = float(os.getenv("CAREERFIT_DEFAULT_THRESHOLD", "0.90"))
