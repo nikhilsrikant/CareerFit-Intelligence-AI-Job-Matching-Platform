@@ -152,6 +152,7 @@ def parse_resume(file_bytes: bytes, filename: str) -> dict:
         "university":      university,
         "degree":          degree,
         "skills_text":     skills_text,
+        "raw_text":        text,
     }
 
 

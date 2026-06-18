@@ -10,6 +10,7 @@ subprocess.run(
 
 import asyncio, json, os, sys, time
 from datetime import date, datetime, timezone
+from html import escape
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -498,7 +499,7 @@ def _make_job_card_html(match, index: int, already_applied: bool) -> str:
     strengths_html = ""
     if match.matched_strengths:
         chips = "".join(
-            f'<span class="skill-chip">{s}</span>'
+            f'<span class="skill-chip">{escape(str(s))}</span>'
             for s in match.matched_strengths[:4]
         )
         strengths_html = f'<div style="margin-top:8px">{chips}</div>'
@@ -643,7 +644,7 @@ def _run_apply_loop(eligible: list, runtime_profile, dry_run: bool) -> None:
 
         status = result.get("status", "failed")
         if status in ("applied", "dry_run"):
-            if _db is not None:
+            if _db is not None and status != "dry_run":  # don't persist dry-run entries
                 try:
                     _db.mark_applied(job_id, match.canonical_url, match.company, match.title, ats_name)
                 except Exception:
@@ -937,9 +938,17 @@ def _render_job_feed(jobs: list, show_apply_buttons: bool = True) -> None:
             filtered.append(match)
         elif filter_active == "F-1 Safe":
             desc = (match.raw_job or {}).get("description", "").lower()
-            if "sponsorship" in desc or "f-1" in desc or "opt" in desc or "cpt" in desc:
-                filtered.append(match)
-            elif "clearance" not in desc and "no sponsorship" not in desc:
+            title_lower = (match.title or "").lower()
+            combined = desc + " " + title_lower
+            # Exclude jobs with explicit blocking language
+            is_blocked = any(kw in combined for kw in [
+                "no sponsorship", "cannot sponsor", "will not sponsor",
+                "sponsorship not available", "security clearance",
+                "secret clearance", "top secret", "ts/sci",
+                "must be a us citizen", "us citizen only",
+                "no visa sponsorship", "authorized without sponsorship",
+            ])
+            if not is_blocked:
                 filtered.append(match)
         elif filter_active == "Intern":
             if "intern" in (match.title or "").lower():
@@ -1003,7 +1012,7 @@ def _apply_single_job(match) -> None:
 
     status = result.get("status", "failed")
     if status in ("applied", "dry_run"):
-        if _db is not None:
+        if _db is not None and status != "dry_run":  # don't persist dry-run entries
             try:
                 _db.mark_applied(job_id, match.canonical_url, match.company, match.title, ats_name)
             except Exception:
@@ -1131,6 +1140,7 @@ def render_dashboard() -> None:
                     st.session_state["apply_log"] = []
                     st.session_state["apply_progress"] = 0
                     st.rerun()
+            st.caption("The agent runs synchronously. The Stop button takes effect between jobs.")
 
     # Apply log
     apply_log = st.session_state.get("apply_log", [])
