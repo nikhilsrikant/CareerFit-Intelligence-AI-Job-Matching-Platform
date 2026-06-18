@@ -54,6 +54,7 @@ def _migrate_profile_columns(conn: sqlite3.Connection) -> None:
             ("education_entries", "TEXT"),
             ("experience_entries", "TEXT"),
             ("skills", "TEXT"),
+            ("api_keys", "TEXT"),
         ]:
             if col_name not in existing:
                 conn.execute(f"ALTER TABLE profile ADD COLUMN {col_name} {col_type}")
@@ -264,6 +265,73 @@ def get_applied_job_ids() -> "set[str]":
         return {row["job_id"] for row in cur.fetchall()}
     finally:
         conn.close()
+
+
+def get_applied_jobs() -> "list[dict]":
+    """Return all applied jobs as a list of dicts, newest first."""
+    conn = get_conn()
+    try:
+        cur = conn.execute("SELECT * FROM applied_jobs ORDER BY applied_at DESC")
+        return [dict(row) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# API key storage
+# ---------------------------------------------------------------------------
+
+_DEFAULT_API_KEYS: "dict[str, str]" = {
+    "jsearch_key": "",
+    "adzuna_app_id": "",
+    "adzuna_app_key": "",
+}
+
+
+def save_api_keys(jsearch_key: str, adzuna_app_id: str, adzuna_app_key: str) -> None:
+    """Persist API keys into the profile row using a targeted UPDATE.
+
+    Uses INSERT OR IGNORE to ensure the profile row exists, then a direct
+    UPDATE on the api_keys column only — avoids the read-modify-write race
+    condition that can drop concurrent saves to other profile columns.
+    """
+    encoded = json.dumps({
+        "jsearch_key": jsearch_key or "",
+        "adzuna_app_id": adzuna_app_id or "",
+        "adzuna_app_key": adzuna_app_key or "",
+    })
+    conn = get_conn()
+    try:
+        # Ensure the profile row exists before updating
+        conn.execute("INSERT OR IGNORE INTO profile (id) VALUES (1)")
+        conn.execute("UPDATE profile SET api_keys=? WHERE id=1", (encoded,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def load_api_keys() -> "dict[str, str]":
+    """Load stored API keys from the profile row.
+
+    Returns a dict with keys jsearch_key, adzuna_app_id, adzuna_app_key.
+    Missing or malformed values default to empty strings.
+    """
+    profile = load_profile()
+    raw = profile.get("api_keys")
+    if not raw:
+        return dict(_DEFAULT_API_KEYS)
+    if isinstance(raw, dict):
+        data = raw
+    else:
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            return dict(_DEFAULT_API_KEYS)
+    return {
+        "jsearch_key": data.get("jsearch_key") or "",
+        "adzuna_app_id": data.get("adzuna_app_id") or "",
+        "adzuna_app_key": data.get("adzuna_app_key") or "",
+    }
 
 
 # ---------------------------------------------------------------------------
