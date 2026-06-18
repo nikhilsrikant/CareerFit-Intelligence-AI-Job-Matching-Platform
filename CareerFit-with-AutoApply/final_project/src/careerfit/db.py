@@ -289,14 +289,25 @@ _DEFAULT_API_KEYS: "dict[str, str]" = {
 
 
 def save_api_keys(jsearch_key: str, adzuna_app_id: str, adzuna_app_key: str) -> None:
-    """Persist API keys into the profile row as a JSON blob in the api_keys column."""
-    profile = load_profile()
-    profile["api_keys"] = json.dumps({
+    """Persist API keys into the profile row using a targeted UPDATE.
+
+    Uses INSERT OR IGNORE to ensure the profile row exists, then a direct
+    UPDATE on the api_keys column only — avoids the read-modify-write race
+    condition that can drop concurrent saves to other profile columns.
+    """
+    encoded = json.dumps({
         "jsearch_key": jsearch_key or "",
         "adzuna_app_id": adzuna_app_id or "",
         "adzuna_app_key": adzuna_app_key or "",
     })
-    save_profile(profile)
+    conn = get_conn()
+    try:
+        # Ensure the profile row exists before updating
+        conn.execute("INSERT OR IGNORE INTO profile (id) VALUES (1)")
+        conn.execute("UPDATE profile SET api_keys=? WHERE id=1", (encoded,))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def load_api_keys() -> "dict[str, str]":

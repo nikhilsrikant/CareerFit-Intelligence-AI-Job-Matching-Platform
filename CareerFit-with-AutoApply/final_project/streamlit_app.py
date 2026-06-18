@@ -574,10 +574,15 @@ def _fetch_and_rank_jobs(force_refresh: bool = False) -> None:
     threshold = st.session_state.get("match_threshold", DEFAULT_THRESHOLD)
     if rank_jobs and runtime_profile:
         try:
-            matches = rank_jobs(normalized, runtime_profile, threshold=0.0)
+            matches = rank_jobs(normalized, runtime_profile, threshold=threshold)
         except Exception:
             matches = []
     else:
+        if not runtime_profile:
+            st.warning(
+                "Profile not built — jobs were fetched but cannot be ranked. "
+                "Re-upload your resume to enable matching."
+            )
         matches = []
 
     st.session_state["jobs"] = matches
@@ -846,6 +851,15 @@ def render_upload_page() -> None:
                     except Exception as exc:
                         st.warning(f"Profile build warning: {exc}")
 
+                # Infer visa_status from resume text rather than hardcoding
+                _resume_text_lower = (parsed.get("raw_text", "") or "").lower()
+                if any(kw in _resume_text_lower for kw in ("f-1", " f1 ", "opt ", " cpt ", "curricular practical")):
+                    _inferred_visa = "F-1"
+                elif any(kw in _resume_text_lower for kw in ("green card", "permanent resident", "lawful permanent")):
+                    _inferred_visa = "PR"
+                else:
+                    _inferred_visa = ""  # user can set in Settings if needed
+
                 # Compose profile dict
                 profile_dict: dict = {
                     "first_name": parsed.get("first_name", ""),
@@ -860,7 +874,7 @@ def render_upload_page() -> None:
                     "degree": parsed.get("degree", ""),
                     "skills": parsed.get("skills_text", ""),
                     "resume_path": str(save_path),
-                    "visa_status": "F-1",
+                    "visa_status": _inferred_visa,
                 }
 
                 if _db is not None:
@@ -1099,7 +1113,10 @@ def render_dashboard() -> None:
 
         eligible = _build_eligible_jobs()
         runtime_profile = st.session_state.get("runtime_profile")
-        _run_apply_loop(eligible, runtime_profile, dry_run)
+        try:
+            _run_apply_loop(eligible, runtime_profile, dry_run)
+        finally:
+            st.session_state["applying"] = False
         st.rerun()
     else:
         mode_label = "(Dry Run)" if dry_run else "(Live)"
@@ -1511,17 +1528,21 @@ def render_settings() -> None:
             except Exception as exc:
                 st.error(f"Could not save API keys: {exc}")
 
-        # Update profile with platform credentials
+        # Update profile with platform credentials (email persisted; password stays in session only)
         updated_profile = dict(current_profile)
         if platform_email:
             updated_profile["email"] = platform_email
-        if platform_password:
+        if platform_email:
             platforms = {}
             if isinstance(updated_profile.get("platforms"), dict):
                 platforms = updated_profile["platforms"]
             platforms["login_email"] = platform_email
-            platforms["login_password"] = platform_password
+            # Do NOT persist login_password to SQLite — store only in session_state
             updated_profile["platforms"] = platforms
+
+        # Keep password in session_state only (not written to DB)
+        if platform_password:
+            st.session_state["platform_password"] = platform_password
 
         if _db is not None and updated_profile:
             try:
