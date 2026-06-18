@@ -2,16 +2,20 @@
 job_board.py — External job-board API integration for CareerFit.
 
 Provides:
-  fetch_jsearch()          — JSearch API via RapidAPI
-  fetch_adzuna()           — Adzuna Jobs API
-  fetch_all_jobs()         — Aggregate both APIs with deduplication
-  detect_ats()             — Infer the ATS platform from an apply URL
+  fetch_jsearch()             — JSearch API via RapidAPI (requires key)
+  fetch_adzuna()              — Adzuna Jobs API (requires key)
+  fetch_greenhouse_public()   — Greenhouse public board API (zero key / zero signup)
+  fetch_lever_public()        — Lever public board API (zero key / zero signup)
+  fetch_workday_public()      — Workday public job search (zero key / zero signup)
+  fetch_all_jobs()            — Aggregate all APIs with deduplication
+  detect_ats()                — Infer the ATS platform from an apply URL
   convert_to_normalized_job() — Convert a raw API dict to NormalizedJob
 """
 
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 import httpx
@@ -19,6 +23,41 @@ import httpx
 from careerfit.fetchers import NormalizedJob
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Free public boards — zero key, zero signup
+# ---------------------------------------------------------------------------
+
+GREENHOUSE_SLUGS = [
+    "stripe", "databricks", "airbnb", "figma", "reddit", "twilio", "coinbase",
+    "robinhood", "doordash_campus", "brex", "benchling", "scale", "verkada",
+    "samsara", "plaid", "squareup", "dropbox", "gitlab", "hashicorp", "cloudflare",
+    "pagerduty", "zendesk", "mongodb", "elastic", "confluent", "datadog",
+    "okta", "box", "pandadoc", "lattice", "gusto", "mixpanel", "amplitude",
+    "duolingo", "quora", "lyft_campus", "asana", "klaviyo", "hubspot",
+    "intercom", "segment", "mimecast", "snyk", "checkr", "greenhouse_io",
+    "affirm", "chime", "brainly", "ro", "nerdwallet",
+]
+
+LEVER_SLUGS = [
+    "lyft", "waymo", "doordash", "coinbase", "figma", "notion", "airtable",
+    "vercel", "supabase", "retool", "linear", "mercury", "brex", "ramp",
+    "watershed", "scale-ai", "anyscale", "weights-biases", "huggingface",
+    "cohere", "anthropic", "mistral", "replicate", "modal", "together-ai",
+]
+
+WORKDAY_TENANTS = [
+    {"tenant": "nvidia", "board": "NVIDIAExternalCareerSite", "subdomain": "nvidia.wd5"},
+    {"tenant": "qualcomm", "board": "External", "subdomain": "qualcomm.wd5"},
+    {"tenant": "micron", "board": "External", "subdomain": "micron.wd1"},
+    {"tenant": "amd", "board": "AMD", "subdomain": "amd.wd1"},
+    {"tenant": "intel", "board": "External", "subdomain": "intel.wd1"},
+    {"tenant": "applied", "board": "External", "subdomain": "applied.wd1"},
+    {"tenant": "cisco", "board": "CiscoJobs", "subdomain": "cisco.wd5"},
+    {"tenant": "paypal", "board": "jobs", "subdomain": "paypal.wd1"},
+    {"tenant": "salesforce", "board": "External", "subdomain": "salesforce.wd12"},
+    {"tenant": "adobe", "board": "external", "subdomain": "adobe.wd5"},
+]
 
 # ---------------------------------------------------------------------------
 # JSearch (RapidAPI)
@@ -146,33 +185,224 @@ def fetch_adzuna(query: str, app_id: str, app_key: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Greenhouse public board (zero key)
+# ---------------------------------------------------------------------------
+
+def _fetch_one_greenhouse(slug: str, keyword: str, client: httpx.Client) -> list[dict]:
+    """Fetch jobs from one Greenhouse company board. Returns [] on any error."""
+    try:
+        url = f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
+        resp = client.get(url, timeout=10)
+        if resp.status_code != 200:
+            return []
+        data = resp.json()
+        jobs = []
+        for item in (data.get("jobs") or []):
+            title = item.get("title") or ""
+            if keyword and keyword.lower() not in title.lower():
+                continue
+            location_obj = item.get("location") or {}
+            jobs.append({
+                "title": title,
+                "company": slug.replace("_", " ").title(),
+                "location": location_obj.get("name") or "",
+                "description": "",
+                "apply_url": item.get("absolute_url") or "",
+                "job_id": str(item.get("id") or ""),
+                "source": "greenhouse_api",
+                "employment_type": "",
+                "date_posted": item.get("updated_at") or "",
+            })
+        return jobs
+    except Exception as exc:
+        logger.debug("greenhouse slug=%s error: %s", slug, exc)
+        return []
+
+
+def fetch_greenhouse_public(keyword: str) -> list[dict]:
+    """Fetch jobs from 50+ Greenhouse company boards in parallel. Zero API key needed."""
+    all_jobs: list[dict] = []
+    with httpx.Client(timeout=12) as client:
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            futures = {
+                pool.submit(_fetch_one_greenhouse, slug, keyword, client): slug
+                for slug in GREENHOUSE_SLUGS
+            }
+            for future in as_completed(futures):
+                try:
+                    all_jobs.extend(future.result())
+                except Exception as exc:
+                    logger.debug("greenhouse future error: %s", exc)
+    return all_jobs
+
+
+# ---------------------------------------------------------------------------
+# Lever public board (zero key)
+# ---------------------------------------------------------------------------
+
+def _fetch_one_lever(slug: str, keyword: str, client: httpx.Client) -> list[dict]:
+    """Fetch jobs from one Lever company board. Returns [] on any error."""
+    try:
+        url = f"https://api.lever.co/v0/postings/{slug}?mode=json"
+        resp = client.get(url, timeout=10)
+        if resp.status_code != 200:
+            return []
+        items = resp.json()
+        if not isinstance(items, list):
+            return []
+        jobs = []
+        for item in items:
+            title = item.get("text") or ""
+            if keyword and keyword.lower() not in title.lower():
+                continue
+            cats = item.get("categories") or {}
+            jobs.append({
+                "title": title,
+                "company": slug.replace("-", " ").title(),
+                "location": cats.get("location") or "",
+                "description": "",
+                "apply_url": item.get("hostedUrl") or "",
+                "job_id": item.get("id") or "",
+                "source": "lever_api",
+                "employment_type": cats.get("commitment") or "",
+                "date_posted": str(item.get("createdAt") or ""),
+            })
+        return jobs
+    except Exception as exc:
+        logger.debug("lever slug=%s error: %s", slug, exc)
+        return []
+
+
+def fetch_lever_public(keyword: str) -> list[dict]:
+    """Fetch jobs from 25+ Lever company boards in parallel. Zero API key needed."""
+    all_jobs: list[dict] = []
+    with httpx.Client(timeout=12) as client:
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            futures = {
+                pool.submit(_fetch_one_lever, slug, keyword, client): slug
+                for slug in LEVER_SLUGS
+            }
+            for future in as_completed(futures):
+                try:
+                    all_jobs.extend(future.result())
+                except Exception as exc:
+                    logger.debug("lever future error: %s", exc)
+    return all_jobs
+
+
+# ---------------------------------------------------------------------------
+# Workday public search (zero key)
+# ---------------------------------------------------------------------------
+
+def _fetch_one_workday(entry: dict, keyword: str, client: httpx.Client) -> list[dict]:
+    """POST to one Workday tenant's public job search endpoint. Returns [] on any error."""
+    tenant = entry["tenant"]
+    board = entry["board"]
+    subdomain = entry["subdomain"]
+    try:
+        url = f"https://{tenant}.myworkdayjobs.com/wday/cxs/{tenant}/{board}/jobs"
+        payload = {
+            "appliedFacets": {},
+            "limit": 20,
+            "offset": 0,
+            "searchText": keyword or "software engineer",
+        }
+        headers = {"Content-Type": "application/json"}
+        resp = client.post(url, json=payload, headers=headers, timeout=12)
+        if resp.status_code != 200:
+            return []
+        data = resp.json()
+        jobs = []
+        for item in (data.get("jobPostings") or []):
+            title = item.get("title") or ""
+            ext_path = item.get("externalPath") or ""
+            apply_url = f"https://{subdomain}.myworkdayjobs.com{ext_path}" if ext_path else ""
+            jobs.append({
+                "title": title,
+                "company": tenant.title(),
+                "location": item.get("locationsText") or "",
+                "description": " ".join(item.get("bulletFields") or []),
+                "apply_url": apply_url,
+                "job_id": ext_path.split("/")[-1] if ext_path else "",
+                "source": "workday_api",
+                "employment_type": "",
+                "date_posted": item.get("postedOn") or "",
+            })
+        return jobs
+    except Exception as exc:
+        logger.debug("workday tenant=%s error: %s", tenant, exc)
+        return []
+
+
+def fetch_workday_public(keyword: str) -> list[dict]:
+    """Search jobs across 10 major Workday tenants in parallel. Zero API key needed."""
+    all_jobs: list[dict] = []
+    with httpx.Client(timeout=14) as client:
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            futures = {
+                pool.submit(_fetch_one_workday, entry, keyword, client): entry["tenant"]
+                for entry in WORKDAY_TENANTS
+            }
+            for future in as_completed(futures):
+                try:
+                    all_jobs.extend(future.result())
+                except Exception as exc:
+                    logger.debug("workday future error: %s", exc)
+    return all_jobs
+
+
+# ---------------------------------------------------------------------------
 # Aggregate + dedup
 # ---------------------------------------------------------------------------
 
-def fetch_all_jobs(profile_keywords: list[str], api_keys_dict: dict) -> list[dict]:
+def fetch_all_jobs(profile_keywords: list[str], api_keys_dict: dict | None = None) -> list[dict]:
     """Fetch and deduplicate jobs from all configured APIs.
 
-    profile_keywords — skills/roles extracted from the user's resume.
-    api_keys_dict    — dict with keys: jsearch_key, adzuna_app_id, adzuna_app_key.
+    Always fetches from the free public boards (Greenhouse, Lever, Workday) — no
+    API key needed, works out of the box.  Optionally also calls JSearch and Adzuna
+    if api_keys_dict contains the respective keys.
 
-    Builds a search query from the first 5 keywords, appends an intern/new-grad
-    suffix, then calls every configured API.
+    profile_keywords — skills/roles extracted from the user's resume.
+    api_keys_dict    — optional dict with keys: jsearch_key, adzuna_app_id, adzuna_app_key.
+
     Deduplication: first by job_id, then by normalised title+company string.
     """
-    jsearch_key = (api_keys_dict or {}).get("jsearch_key") or ""
-    adzuna_app_id = (api_keys_dict or {}).get("adzuna_app_id") or ""
-    adzuna_app_key = (api_keys_dict or {}).get("adzuna_app_key") or ""
+    api_keys_dict = api_keys_dict or {}
+    jsearch_key = api_keys_dict.get("jsearch_key") or ""
+    adzuna_app_id = api_keys_dict.get("adzuna_app_id") or ""
+    adzuna_app_key = api_keys_dict.get("adzuna_app_key") or ""
 
     keywords = (profile_keywords or [])[:5]
     if keywords:
         base_query = " ".join(keywords)
         query = f"{base_query} intern OR new grad OR entry level"
+        # Simpler keyword for board-level filtering (first skill term)
+        board_keyword = keywords[0] if keywords else ""
     else:
         query = "software engineer intern"
+        board_keyword = "software engineer"
 
     all_jobs: list[dict] = []
-    all_jobs.extend(fetch_jsearch(query, jsearch_key))
-    all_jobs.extend(fetch_adzuna(query, adzuna_app_id, adzuna_app_key))
+
+    # Always fetch from free public boards (zero key needed)
+    try:
+        all_jobs.extend(fetch_greenhouse_public(board_keyword))
+    except Exception as exc:
+        logger.warning("fetch_greenhouse_public error: %s", exc)
+    try:
+        all_jobs.extend(fetch_lever_public(board_keyword))
+    except Exception as exc:
+        logger.warning("fetch_lever_public error: %s", exc)
+    try:
+        all_jobs.extend(fetch_workday_public(board_keyword))
+    except Exception as exc:
+        logger.warning("fetch_workday_public error: %s", exc)
+
+    # Optionally augment with paid API sources if keys are configured
+    if jsearch_key:
+        all_jobs.extend(fetch_jsearch(query, jsearch_key))
+    if adzuna_app_id and adzuna_app_key:
+        all_jobs.extend(fetch_adzuna(query, adzuna_app_id, adzuna_app_key))
 
     # Dedup pass 1: by job_id
     seen_ids: set[str] = set()
