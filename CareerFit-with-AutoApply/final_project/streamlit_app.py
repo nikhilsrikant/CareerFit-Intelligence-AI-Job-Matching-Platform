@@ -79,7 +79,7 @@ st.set_page_config(
     page_title=APP_TITLE,
     page_icon="✦",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ---------------------------------------------------------------------------
@@ -359,6 +359,47 @@ div[data-testid="stExpander"] {
 st.markdown(_CSS, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
+# Top navigation bar — always visible on every page
+# ---------------------------------------------------------------------------
+
+def render_topnav() -> None:
+    """Render a persistent horizontal navigation strip at the top of every page."""
+    current = st.session_state.get("page", "upload")
+    pages = [
+        ("dashboard", "&#127968; Dashboard"),
+        ("resume", "&#128196; Resume"),
+        ("jobs", "&#128269; Jobs"),
+        ("applied", "&#128640; Applied"),
+        ("settings", "&#9881; Settings"),
+    ]
+    # Build columns: logo | each page | spacer
+    cols = st.columns([0.8] + [1] * len(pages) + [0.5])
+    with cols[0]:
+        st.markdown(
+            "<div style='padding-top:6px;font-weight:700;font-size:1.1rem;"
+            "color:#818CF8;font-family:Inter,sans-serif'>CF</div>",
+            unsafe_allow_html=True,
+        )
+    for i, (page_key, label) in enumerate(pages):
+        with cols[i + 1]:
+            is_active = current == page_key
+            if st.button(
+                label,
+                key=f"topnav_{page_key}",
+                type="primary" if is_active else "secondary",
+                use_container_width=True,
+            ):
+                if page_key != current:
+                    st.session_state["page"] = page_key
+                    st.rerun()
+
+    st.markdown(
+        "<hr style='border:none;border-top:1px solid rgba(99,102,241,0.15);margin:4px 0 16px'>",
+        unsafe_allow_html=True,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Session state initialisation
 # ---------------------------------------------------------------------------
 
@@ -528,16 +569,16 @@ def _fetch_and_rank_jobs(force_refresh: bool = False) -> None:
     if not force_refresh and st.session_state.get("jobs"):
         return  # already cached
 
-    if _db is None or fetch_all_jobs is None:
+    if fetch_all_jobs is None:
         return
 
-    api_keys = _db.load_api_keys()
-    has_keys = bool(
-        api_keys.get("jsearch_key")
-        or (api_keys.get("adzuna_app_id") and api_keys.get("adzuna_app_key"))
-    )
-    if not has_keys:
-        return
+    # Load API keys for optional paid sources; free sources always run
+    api_keys: dict = {}
+    if _db is not None:
+        try:
+            api_keys = _db.load_api_keys()
+        except Exception:
+            pass
 
     runtime_profile = st.session_state.get("runtime_profile")
     keyword_override = st.session_state.get("keyword_override", "")
@@ -551,12 +592,24 @@ def _fetch_and_rank_jobs(force_refresh: bool = False) -> None:
         raw_skills = profile.get("skills", "")
         keywords = [s.strip() for s in (raw_skills or "").split(",") if s.strip()][:10]
 
-    with st.spinner("Fetching jobs from job boards..."):
+    with st.spinner("Fetching jobs from 50+ companies (Greenhouse, Lever, Workday)..."):
         try:
             raw_jobs = fetch_all_jobs(keywords, api_keys)
         except Exception as exc:
             st.warning(f"Job fetch error: {exc}")
             return
+
+    if raw_jobs:
+        source_counts: dict[str, int] = {}
+        for j in raw_jobs:
+            src = j.get("source", "unknown")
+            source_counts[src] = source_counts.get(src, 0) + 1
+        sources_str = ", ".join(
+            s.replace("_api", "").title()
+            for s in ["greenhouse_api", "lever_api", "workday_api", "jsearch", "adzuna"]
+            if source_counts.get(s, 0) > 0
+        )
+        st.success(f"Found {len(raw_jobs)} jobs across {sources_str}")
 
     if not raw_jobs:
         st.session_state["jobs"] = []
@@ -580,11 +633,24 @@ def _fetch_and_rank_jobs(force_refresh: bool = False) -> None:
             matches = []
     else:
         if not runtime_profile:
-            st.warning(
-                "Profile not built — jobs were fetched but cannot be ranked. "
-                "Re-upload your resume to enable matching."
-            )
-        matches = []
+            # No runtime profile yet — show all jobs unranked so the feed is populated
+            from dataclasses import dataclass as _dc, field as _field
+
+            class _FakeMatch:
+                """Minimal stand-in for JobMatch when no runtime profile exists."""
+                def __init__(self, job: "NormalizedJob") -> None:
+                    self.score = 0.75
+                    self.company = job.company
+                    self.title = job.title
+                    self.location = job.location
+                    self.canonical_url = job.canonical_url
+                    self.source = job.source
+                    self.matched_strengths: list = []
+                    self.raw_job = job.raw_payload or {}
+
+            matches = [_FakeMatch(j) for j in normalized]
+        else:
+            matches = []
 
     st.session_state["jobs"] = matches
     st.session_state["jobs_last_fetched"] = datetime.now(timezone.utc)
@@ -746,29 +812,16 @@ def render_sidebar() -> None:
 
         for page_key, label in nav_items:
             is_active = current_page == page_key
-            style = (
-                "background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.4);color:#818CF8;"
-                if is_active
-                else "background:transparent;border:1px solid transparent;color:#94A3B8;"
-            )
             if st.button(
                 label,
                 key=f"nav_{page_key}",
                 help=None,
                 use_container_width=True,
+                type="primary" if is_active else "secondary",
             ):
                 if page_key != current_page:
                     st.session_state["page"] = page_key
                     st.rerun()
-            # Re-style just the last rendered button via inline CSS trick
-            st.markdown(
-                f"""<style>
-div[data-testid="stButton"] button[kind="secondary"]:last-of-type {{
-    {style}
-}}
-</style>""",
-                unsafe_allow_html=True,
-            )
 
         st.divider()
 
@@ -894,12 +947,7 @@ def render_upload_page() -> None:
 <div style="text-align:center;margin-top:20px">
   <div style="color:#475569;font-size:0.82rem">Supports PDF, DOCX, TXT</div>
   <div style="color:#475569;font-size:0.78rem;margin-top:8px">
-    Need API keys?
-    <a href="https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch"
-       style="color:#818CF8;text-decoration:none" target="_blank">JSearch (free tier)</a>
-    &nbsp;&middot;&nbsp;
-    <a href="https://developer.adzuna.com"
-       style="color:#818CF8;text-decoration:none" target="_blank">Adzuna (free)</a>
+    Jobs are fetched automatically from Greenhouse, Lever, and Workday &mdash; no API key needed.
   </div>
 </div>
 """,
@@ -920,7 +968,7 @@ def _render_job_feed(jobs: list, show_apply_buttons: bool = True) -> None:
   <div style="font-size:2.5rem;margin-bottom:12px">&#128269;</div>
   <div style="font-size:1rem;font-weight:600;color:#E2E8F0;margin-bottom:6px">No jobs found yet</div>
   <div style="color:#64748B;font-size:0.875rem">
-    Click <strong>Fetch Jobs</strong> above or add API keys in Settings to start finding opportunities.
+    Click <strong>Fetch Jobs</strong> above to search across 50+ companies automatically.
   </div>
 </div>
 """,
@@ -1025,6 +1073,7 @@ def _apply_single_job(match) -> None:
 
 
 def render_dashboard() -> None:
+    render_topnav()
     profile = st.session_state.get("profile", {})
     first_name = profile.get("first_name", "")
     greeting = f"Welcome back, {first_name}." if first_name else "Welcome back."
@@ -1035,17 +1084,9 @@ def render_dashboard() -> None:
         unsafe_allow_html=True,
     )
 
-    # Check API keys
-    api_keys: dict = {}
-    if _db is not None:
-        try:
-            api_keys = _db.load_api_keys()
-        except Exception:
-            pass
-    has_keys = bool(
-        api_keys.get("jsearch_key")
-        or (api_keys.get("adzuna_app_id") and api_keys.get("adzuna_app_key"))
-    )
+    # Auto-fetch jobs on page load if none cached yet
+    if not st.session_state.get("jobs") and fetch_all_jobs is not None:
+        _fetch_and_rank_jobs()
 
     jobs = st.session_state.get("jobs", [])
     threshold = st.session_state.get("match_threshold", DEFAULT_THRESHOLD)
@@ -1074,25 +1115,6 @@ def render_dashboard() -> None:
         )
 
     st.markdown("<div style='margin-top:20px'></div>", unsafe_allow_html=True)
-
-    # No API keys CTA
-    if not has_keys:
-        st.markdown(
-            """
-<div class="glass-card" style="text-align:center;padding:32px">
-  <div style="font-size:2rem;margin-bottom:10px">&#128273;</div>
-  <div style="font-weight:600;font-size:1rem;color:#E2E8F0;margin-bottom:6px">Connect Job Boards</div>
-  <div style="color:#64748B;font-size:0.875rem;margin-bottom:16px">
-    Add your JSearch or Adzuna API keys to start fetching real job listings.
-  </div>
-</div>
-""",
-            unsafe_allow_html=True,
-        )
-        if st.button("&#9881;  Go to Settings", key="cta_settings"):
-            st.session_state["page"] = "settings"
-            st.rerun()
-        return
 
     # Fetch / refresh controls
     fetch_col, refresh_col = st.columns([3, 1])
@@ -1177,6 +1199,7 @@ def render_dashboard() -> None:
 # ---------------------------------------------------------------------------
 
 def render_resume() -> None:
+    render_topnav()
     st.markdown(
         '<div class="page-header">&#128196;  Your Resume</div>'
         '<div class="page-sub">Parsed automatically from your uploaded file.</div>',
@@ -1271,11 +1294,16 @@ def render_resume() -> None:
 # ---------------------------------------------------------------------------
 
 def render_jobs() -> None:
+    render_topnav()
     st.markdown(
         '<div class="page-header">&#128269;  Job Listings</div>'
         '<div class="page-sub">All fetched jobs with advanced filters.</div>',
         unsafe_allow_html=True,
     )
+
+    # Auto-fetch if no jobs cached yet
+    if not st.session_state.get("jobs") and fetch_all_jobs is not None:
+        _fetch_and_rank_jobs()
 
     # Keyword search
     search_col, btn_col = st.columns([4, 1])
@@ -1324,31 +1352,9 @@ def render_jobs() -> None:
 
     jobs = st.session_state.get("jobs", [])
     if not jobs:
-        api_keys: dict = {}
-        if _db is not None:
-            try:
-                api_keys = _db.load_api_keys()
-            except Exception:
-                pass
-        has_keys = bool(
-            api_keys.get("jsearch_key")
-            or (api_keys.get("adzuna_app_id") and api_keys.get("adzuna_app_key"))
-        )
-        if not has_keys:
-            st.markdown(
-                """
-<div class="glass-card" style="text-align:center;padding:32px">
-  <div style="font-size:2rem;margin-bottom:10px">&#128273;</div>
-  <div style="font-weight:600;font-size:1rem;color:#E2E8F0;margin-bottom:6px">No API Keys Configured</div>
-  <div style="color:#64748B;font-size:0.875rem">Add JSearch or Adzuna API keys in Settings to fetch jobs.</div>
-</div>
-""",
-                unsafe_allow_html=True,
-            )
-        else:
-            if st.button("&#128269;  Fetch Jobs Now", key="jobs_fetch_now_btn", use_container_width=True):
-                _fetch_and_rank_jobs(force_refresh=True)
-                st.rerun()
+        if st.button("&#128269;  Fetch Jobs Now", key="jobs_fetch_now_btn", use_container_width=True):
+            _fetch_and_rank_jobs(force_refresh=True)
+            st.rerun()
     else:
         _render_job_feed(jobs, show_apply_buttons=True)
 
@@ -1358,6 +1364,7 @@ def render_jobs() -> None:
 # ---------------------------------------------------------------------------
 
 def render_applied() -> None:
+    render_topnav()
     st.markdown(
         '<div class="page-header">&#128640;  Applications</div>'
         '<div class="page-sub">Track every application submitted by the agent.</div>',
@@ -1424,9 +1431,10 @@ def render_applied() -> None:
 # ---------------------------------------------------------------------------
 
 def render_settings() -> None:
+    render_topnav()
     st.markdown(
         '<div class="page-header">&#9881;  Settings</div>'
-        '<div class="page-sub">Configure job board API keys and agent behaviour.</div>',
+        '<div class="page-sub">Configure job board API keys and agent behaviour. JSearch and Adzuna keys are optional — jobs are fetched automatically from Greenhouse, Lever, and Workday without any keys.</div>',
         unsafe_allow_html=True,
     )
 
@@ -1446,9 +1454,10 @@ def render_settings() -> None:
             pass
 
     with st.form("settings_form"):
-        st.markdown('<div class="section-title">&#128273;  Job Board API Keys</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">&#128273;  Job Board API Keys (Optional)</div>', unsafe_allow_html=True)
         st.markdown(
-            "Get free API keys: "
+            "Jobs are fetched automatically from **Greenhouse**, **Lever**, and **Workday** — "
+            "no API key needed. Add keys below to also pull results from JSearch and Adzuna: "
             "[JSearch via RapidAPI](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) &nbsp;|&nbsp; "
             "[Adzuna Developer](https://developer.adzuna.com)",
             unsafe_allow_html=True,
@@ -1573,7 +1582,9 @@ def render_settings() -> None:
         st.session_state["jobs_raw"] = []
         st.session_state["jobs_last_fetched"] = None
 
-        st.success("Settings saved! Job cache cleared — fetch fresh jobs from the Dashboard.")
+        st.success("Settings saved! Returning to Dashboard...")
+        st.session_state["page"] = "dashboard"
+        st.rerun()
 
 
 # ---------------------------------------------------------------------------
