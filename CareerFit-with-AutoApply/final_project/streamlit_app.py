@@ -1221,10 +1221,7 @@ def log(message: str) -> None:
 
 @st.cache_data(show_spinner=False, ttl=120)
 def get_default_companies() -> list[dict]:
-    try:
-        return load_companies(str(ROOT / "config" / "companies.yaml"))
-    except Exception:
-        return []
+    return []
 
 
 def load_persisted_companies() -> list[dict]:
@@ -2608,6 +2605,64 @@ if st.session_state.active_tab == "matching":
                 st.success("Manually added employer sources were cleared. Default configured sources remain available.")
         with cc2:
             st.caption("Employer sources added here are saved locally for future sessions.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # ── API-Powered Job Discovery ─────────────────────────────────────────
+        st.markdown("<div class='cf-card'><h3>&#x1F310; API-Powered Job Discovery</h3><p class='cf-muted'>Fetch jobs automatically using free public boards and your configured API keys. No company sources needed.</p>", unsafe_allow_html=True)
+        _api_keys_now = st.session_state.get("api_keys") or {}
+        _openai_ok = bool(_api_keys_now.get("openai_api_key"))
+        _jsearch_ok = bool(_api_keys_now.get("jsearch_key"))
+        _adzuna_ok = bool(_api_keys_now.get("adzuna_app_id") and _api_keys_now.get("adzuna_app_key"))
+        st.markdown(
+            f"<div style='display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px'>"
+            f"<span class='cf-tag cf-tag-green'>&#x2705; Free Boards (Greenhouse/Lever/Workday)</span>"
+            f"<span class='cf-tag {'cf-tag-green' if _jsearch_ok else ''}'>{'&#x2705;' if _jsearch_ok else '&#x2B1C;'} JSearch API</span>"
+            f"<span class='cf-tag {'cf-tag-green' if _adzuna_ok else ''}'>{'&#x2705;' if _adzuna_ok else '&#x2B1C;'} Adzuna API</span>"
+            f"<span class='cf-tag {'cf-tag-green' if _openai_ok else ''}'>{'&#x2705;' if _openai_ok else '&#x2B1C;'} OpenAI Q&A</span>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        if not _openai_ok or not _jsearch_ok:
+            st.caption("Configure API keys in the Settings tab for richer job discovery and LLM-powered Q&A.")
+        if st.button("&#x1F50D; Fetch Jobs via API", use_container_width=True, key="fetch_api_jobs_btn", type="primary"):
+            try:
+                from careerfit.job_board import fetch_all_jobs, convert_to_normalized_job
+                _profile_keywords = list(st.session_state.profile.skills[:5]) if st.session_state.profile.skills else ["software engineer"]
+                _api_keys_for_fetch = st.session_state.get("api_keys") or {}
+                with st.spinner("Fetching jobs from public boards and APIs..."):
+                    _raw_jobs = fetch_all_jobs(_profile_keywords, _api_keys_for_fetch)
+                if _raw_jobs:
+                    _existing_urls = {j.canonical_url for j in st.session_state.jobs}
+                    _new_jobs = []
+                    for _rj in _raw_jobs:
+                        try:
+                            _nj = convert_to_normalized_job(_rj)
+                            if _nj.canonical_url and _nj.canonical_url not in _existing_urls:
+                                _new_jobs.append(_nj)
+                                _existing_urls.add(_nj.canonical_url)
+                        except Exception:
+                            pass
+                    if _new_jobs:
+                        from careerfit.matching import rank_jobs, extract_intent_terms
+                        st.session_state.jobs = list(st.session_state.jobs) + _new_jobs
+                        _all_matches = rank_jobs(
+                            st.session_state.jobs,
+                            st.session_state.profile,
+                            threshold=threshold,
+                            us_only=location_mode == "United States / Remote only",
+                            include_unknown_locations=include_unknown_locations,
+                            intent_terms=extract_intent_terms(search_text),
+                            max_years_experience=max_years_experience,
+                        )
+                        st.session_state.matches = _all_matches
+                        st.success(f"Added {len(_new_jobs)} new jobs. Total: {len(st.session_state.jobs)} jobs, {len(st.session_state.matches)} ranked.")
+                        log(f"API job discovery: fetched {len(_raw_jobs)} raw jobs, added {len(_new_jobs)} new")
+                    else:
+                        st.info("No new jobs found (all already in results or no matching roles).")
+                else:
+                    st.warning("No jobs returned from APIs. Check Settings for API key configuration.")
+            except Exception as _api_err:
+                st.error(f"API job fetch error: {_api_err}")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with right:
