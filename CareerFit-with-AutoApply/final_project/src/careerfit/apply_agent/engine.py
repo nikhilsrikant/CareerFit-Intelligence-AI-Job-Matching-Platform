@@ -89,7 +89,29 @@ class ApplicationEngine:
     async def start(self, runtime_profile=None):
         from playwright.async_api import async_playwright
         cfg = load_profile(self._profile_path)
-        self._field_mapper = FieldMapper(cfg, runtime_profile, qa_answers=self._qa_answers)
+        # Extract openai_api_key from profile or db
+        openai_api_key = ""
+        try:
+            api_keys_raw = cfg.get("api_keys", {})
+            if isinstance(api_keys_raw, str):
+                import json as _json
+                api_keys_raw = _json.loads(api_keys_raw)
+            openai_api_key = (api_keys_raw or {}).get("openai_api_key", "") or ""
+        except Exception:
+            pass
+        if not openai_api_key:
+            try:
+                from careerfit import db as _db
+                openai_api_key = _db.load_api_keys().get("openai_api_key", "") or ""
+            except Exception:
+                pass
+        self._field_mapper = FieldMapper(
+            cfg,
+            runtime_profile,
+            qa_answers=self._qa_answers,
+            openai_api_key=openai_api_key,
+            job_description="",
+        )
 
         self._pw = await async_playwright().start()
         self._browser = await self._pw.chromium.launch(
@@ -146,6 +168,17 @@ class ApplicationEngine:
             ats = (job.get("source") or job.get("ats") or "generic").lower()
             adapter = get_adapter(ats)
             logger.info("[%s] → %s (ATS: %s)", job.get("company"), job.get("title"), ats)
+            # Update job_description context for this specific job.
+            # Only reset the LLM engine when the job description actually changes so that
+            # profile-derived answers (years of experience, work authorization, etc.) stay
+            # cached across jobs and don't trigger unnecessary LLM calls.
+            if self._field_mapper is not None:
+                job_desc = job.get("description") or job.get("job_description") or ""
+                prev_desc = getattr(self._field_mapper, '_job_description', '')
+                if job_desc != prev_desc:
+                    self._field_mapper._job_description = job_desc
+                    self._field_mapper._llm_engine_instance = None  # rebuild LLM engine with new JD
+                    # Do NOT clear the full cache — profile answers are job-independent
             result = await adapter.apply(page, self._field_mapper, job)
         except Exception as e:
             logger.exception("Error: %s", e)

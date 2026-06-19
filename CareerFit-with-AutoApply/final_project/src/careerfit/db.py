@@ -285,10 +285,16 @@ _DEFAULT_API_KEYS: "dict[str, str]" = {
     "jsearch_key": "",
     "adzuna_app_id": "",
     "adzuna_app_key": "",
+    "openai_api_key": "",
 }
 
 
-def save_api_keys(jsearch_key: str, adzuna_app_id: str, adzuna_app_key: str) -> None:
+def save_api_keys(
+    jsearch_key: str,
+    adzuna_app_id: str,
+    adzuna_app_key: str,
+    openai_api_key: str = "",
+) -> None:
     """Persist API keys into the profile row using a targeted UPDATE.
 
     Uses INSERT OR IGNORE to ensure the profile row exists, then a direct
@@ -299,6 +305,7 @@ def save_api_keys(jsearch_key: str, adzuna_app_id: str, adzuna_app_key: str) -> 
         "jsearch_key": jsearch_key or "",
         "adzuna_app_id": adzuna_app_id or "",
         "adzuna_app_key": adzuna_app_key or "",
+        "openai_api_key": openai_api_key or "",
     })
     conn = get_conn()
     try:
@@ -313,7 +320,7 @@ def save_api_keys(jsearch_key: str, adzuna_app_id: str, adzuna_app_key: str) -> 
 def load_api_keys() -> "dict[str, str]":
     """Load stored API keys from the profile row.
 
-    Returns a dict with keys jsearch_key, adzuna_app_id, adzuna_app_key.
+    Returns a dict with keys jsearch_key, adzuna_app_id, adzuna_app_key, openai_api_key.
     Missing or malformed values default to empty strings.
     """
     profile = load_profile()
@@ -331,6 +338,7 @@ def load_api_keys() -> "dict[str, str]":
         "jsearch_key": data.get("jsearch_key") or "",
         "adzuna_app_id": data.get("adzuna_app_id") or "",
         "adzuna_app_key": data.get("adzuna_app_key") or "",
+        "openai_api_key": data.get("openai_api_key") or "",
     }
 
 
