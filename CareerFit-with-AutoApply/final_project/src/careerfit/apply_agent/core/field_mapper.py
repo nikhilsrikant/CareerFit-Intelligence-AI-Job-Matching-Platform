@@ -266,10 +266,17 @@ class FieldMapper:
             for opt in available_options:
                 if opt.lower().strip() == llm_lower:
                     return opt
-            # Partial match fallback
+            # Partial match fallback — require SequenceMatcher >= 0.80 to avoid false positives
+            from difflib import SequenceMatcher as _SM
+            best_opt: "str | None" = None
+            best_ratio: float = 0.0
             for opt in available_options:
-                if llm_lower in opt.lower() or opt.lower() in llm_lower:
-                    return opt
+                ratio = _SM(None, llm_lower, opt.lower().strip()).ratio()
+                if ratio > best_ratio:
+                    best_ratio = ratio
+                    best_opt = opt
+            if best_ratio >= 0.80:
+                return best_opt
         return None
 
     def cover_letter_for_job(self, job_title: str, company: str) -> str:

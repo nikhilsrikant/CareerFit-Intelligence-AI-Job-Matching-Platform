@@ -158,37 +158,39 @@ def _extract_experience_entries(text: str) -> list:
                 end_date = m.group(2).strip()
                 is_current = end_date.lower() in ("present", "current", "now")
 
-                # Look backwards (up to 3 lines) for title and company
-                # Convention: line immediately before date = title, line before that = company
+                # Check same-line format FIRST (e.g. "Software Engineer | Google   Jan 2022 – May 2023")
+                line_no_date = _DATE_RANGE_RE.sub("", line).strip().strip("|,;-").strip()
                 title = ""
                 company = ""
-                preceding_lines = []
-                for back in range(1, 4):
-                    idx = i - back
-                    if idx < 0:
-                        break
-                    candidate = lines[idx].strip()
-                    if not candidate or _DATE_RANGE_RE.search(candidate):
-                        break
-                    preceding_lines.append(candidate)
-                # preceding_lines[0] = closest to date line (title), [1] = company
-                if len(preceding_lines) >= 2:
-                    title = preceding_lines[0]
-                    company = preceding_lines[1]
-                elif len(preceding_lines) == 1:
-                    title = preceding_lines[0]
-
-                # Dates and title/company may be on the same line
-                # (e.g. "Software Engineer | Google   Jan 2022 - May 2023")
-                line_no_date = _DATE_RANGE_RE.sub("", line).strip().strip("|,;-").strip()
-                if line_no_date and not title and not company:
+                if line_no_date and re.search(r"[\|@]", line_no_date):
+                    # Same-line format detected — split by separator
                     parts = re.split(r"\s*[\|,@]\s*", line_no_date, maxsplit=1)
                     if len(parts) == 2:
                         title, company = parts[0].strip(), parts[1].strip()
                     else:
                         title = parts[0].strip()
-                elif line_no_date and not title:
-                    title = line_no_date
+                else:
+                    # Look backwards (up to 3 lines) for title and company
+                    preceding_lines = []
+                    for back in range(1, 4):
+                        idx = i - back
+                        if idx < 0:
+                            break
+                        candidate = lines[idx].strip()
+                        if not candidate or _DATE_RANGE_RE.search(candidate):
+                            break
+                        # Skip lines that look like bullets or are very long (descriptions)
+                        if candidate.startswith(('-', '\u2022', '*', '\u2013')) or len(candidate) > 80:
+                            break
+                        preceding_lines.append(candidate)
+                    if len(preceding_lines) >= 2:
+                        title = preceding_lines[0]
+                        company = preceding_lines[1]
+                    elif len(preceding_lines) == 1:
+                        title = preceding_lines[0]
+                    # Also check if the date-only line has remaining text after stripping date
+                    if not title and line_no_date:
+                        title = line_no_date
 
                 # Collect description bullets forward
                 desc_lines: list = []
@@ -240,7 +242,11 @@ def _extract_education_entries(text: str) -> list:
         current_block: list = []
         for line in lines:
             stripped = line.strip()
-            if school_line_re.search(stripped) and current_block:
+            # A "school-name" line either contains known keywords OR is a short capitalized institution name
+            is_school_line = (school_line_re.search(stripped) or
+                              (len(stripped) <= 40 and stripped.isupper() and len(stripped) > 2) or
+                              (2 <= len(stripped.split()) <= 6 and all(w[0].isupper() for w in stripped.split() if w and w[0].isalpha()) and not _DEGREE_RE.search(stripped)))
+            if is_school_line and current_block:
                 blocks.append(current_block)
                 current_block = [stripped]
             elif stripped:
