@@ -142,9 +142,30 @@ class GreenhouseAdapter(BaseAdapter):
                 ftype = f.get("type", "input_text")
                 fname = f.get("name", "")
                 sel = f"[name='{fname}']" if fname else f"[data-question-id='{q_id}']"
+
+                # Try profile + QA first, then LLM as fallback
                 value = mapper.resolve(label)
                 if not value and "cover letter" in label.lower():
                     value = mapper.cover_letter_for_job(title, company)
+
+                if not value:
+                    # LLM fallback for unique/unknown questions
+                    if ftype == "select":
+                        # Get available options first so LLM can pick the best one
+                        try:
+                            el = page.locator(sel).first
+                            if await el.count() > 0:
+                                tag = await el.evaluate("el => el.tagName.toLowerCase()")
+                                if tag == "select":
+                                    options = await el.evaluate(
+                                        "el => Array.from(el.options).map(o => o.text.trim()).filter(t => t)"
+                                    )
+                                    value = mapper.resolve_with_llm(label, options)
+                        except Exception:
+                            pass
+                    else:
+                        value = mapper.resolve_with_llm(label)
+
                 if value:
                     if ftype in ("input_text", "textarea"):
                         await self.fast_fill(page, sel, str(value))

@@ -58,9 +58,23 @@ class GenericAdapter(BaseAdapter):
             await self.upload_file(page, "input[type='file']", str(resume))
             await asyncio.sleep(0.5)
 
-        # Label-driven fill for everything else
+        # Label-driven fill for everything else (first step/page)
         filled = await self.fill_fields_by_label(page, mapper, title, company)
+        # Radio button groups on the first step
+        filled += await self._fill_radio_groups(page, mapper, title, company)
         logger.info(f"[generic] Filled {filled} fields for {title} @ {company}")
+
+        # Multi-step loop (up to 5 additional steps)
+        for _step in range(5):
+            _found_next = await self.click_next(
+                page, ["Next", "Continue", "Next Step", "Proceed", "Next Page"]
+            )
+            if not _found_next:
+                break
+            await asyncio.sleep(1.0)
+            _more = await self.fill_fields_by_label(page, mapper, title, company)
+            _more += await self._fill_radio_groups(page, mapper, title, company)
+            filled += _more
 
         dry_run = mapper._cfg.get("dry_run", True)
         if dry_run:
@@ -72,6 +86,91 @@ class GenericAdapter(BaseAdapter):
         if submitted:
             return {"status": "success", "reason": "submitted"}
         return {"status": "success", "reason": f"form filled ({filled} fields); manual submit needed"}
+
+    async def _fill_radio_groups(self, page: Page, mapper: FieldMapper,
+                                  job_title: str = "", company: str = "") -> int:
+        """Find all radio button groups and select the best option using profile or LLM."""
+        filled = 0
+        try:
+            radio_groups = await page.evaluate("""
+                () => {
+                    const groups = {};
+                    document.querySelectorAll('input[type="radio"]').forEach(el => {
+                        const name = el.getAttribute('name');
+                        if (!name) return;
+                        if (!groups[name]) {
+                            // Walk up to find a group label (legend, fieldset label, etc.)
+                            let label = '';
+                            let parent = el.parentElement;
+                            for (let i = 0; i < 8; i++) {
+                                if (!parent) break;
+                                const legends = parent.querySelectorAll('legend');
+                                if (legends.length) { label = legends[0].innerText.trim(); break; }
+                                const labels = parent.querySelectorAll('label');
+                                if (labels.length && labels[0] !== el.parentElement) {
+                                    label = labels[0].innerText.trim(); break;
+                                }
+                                parent = parent.parentElement;
+                            }
+                            const options = Array.from(
+                                document.querySelectorAll('input[type="radio"][name="' + name + '"]')
+                            ).map(r => {
+                                let optLabel = '';
+                                const id = r.id;
+                                if (id) {
+                                    const lEl = document.querySelector('label[for="' + id + '"]');
+                                    if (lEl) optLabel = lEl.innerText.trim();
+                                }
+                                if (!optLabel) optLabel = r.value;
+                                return { value: r.value, label: optLabel };
+                            });
+                            groups[name] = { groupLabel: label, options: options };
+                        }
+                    });
+                    return Object.entries(groups).map(([name, data]) => (
+                        { name: name, groupLabel: data.groupLabel, options: data.options }
+                    ));
+                }
+            """)
+
+            for group in (radio_groups or []):
+                group_label = group.get("groupLabel", "") or group.get("name", "")
+                options = group.get("options", [])
+                option_labels = [o.get("label", o.get("value", "")) for o in options]
+
+                if not group_label or not options:
+                    continue
+
+                # Try profile/Q&A first, then LLM
+                value = mapper.resolve(group_label, "radio")
+                if not value:
+                    value = mapper.resolve_with_llm(group_label, option_labels)
+
+                if not value:
+                    continue
+
+                value_lower = str(value).lower().strip()
+                for opt in options:
+                    opt_label = (opt.get("label") or opt.get("value") or "").lower().strip()
+                    opt_value = opt.get("value", "")
+                    if (opt_label == value_lower
+                            or opt_value.lower() == value_lower
+                            or value_lower in opt_label):
+                        try:
+                            radio_sel = (
+                                f"input[type='radio'][name='{group['name']}']"
+                                f"[value='{opt_value}']"
+                            )
+                            radio_el = page.locator(radio_sel).first
+                            if await radio_el.count() > 0:
+                                await radio_el.click()
+                                filled += 1
+                                break
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        return filled
 
 
 class AmazonAdapter(BaseAdapter):
