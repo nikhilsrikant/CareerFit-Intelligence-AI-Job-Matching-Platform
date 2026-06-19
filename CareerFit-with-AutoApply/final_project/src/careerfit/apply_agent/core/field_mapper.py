@@ -19,6 +19,12 @@ try:
 except ImportError:
     _resolve_dropdown_value = None  # type: ignore[assignment]
 
+# Optional import — gracefully absent if llm_qa module not yet created
+try:
+    from careerfit.apply_agent.core.llm_qa import LLMQAEngine as _LLMQAEngine
+except ImportError:
+    _LLMQAEngine = None  # type: ignore[assignment,misc]
+
 
 # ────────────────────────────────────────────────────────────────────────────
 # Synonym groups — add more as you encounter new field labels in the wild
@@ -92,18 +98,85 @@ class FieldMapper:
         value = mapper.resolve("Current Job Title")
     """
 
-    def __init__(self, applicant_cfg: dict, runtime_profile=None, qa_answers: "list[dict] | None" = None):
+    def __init__(self, applicant_cfg: dict, runtime_profile=None, qa_answers: "list[dict] | None" = None,
+                 openai_api_key: str = '', job_description: str = ''):
         """
         applicant_cfg: loaded from applicant_profile.yaml
         runtime_profile: careerfit.source_intelligence.RuntimeProfile (optional but recommended)
         qa_answers: list of dicts with 'question_pattern' and 'answer' keys
+        openai_api_key: user-supplied OpenAI API key for LLM-powered Q&A fallback
+        job_description: text of the job description (used for LLM context)
         """
         self._cfg = applicant_cfg
         self._profile = runtime_profile
         self._qa_answers = qa_answers or []
+        self._openai_api_key = openai_api_key or ''
+        self._job_description = job_description or ''
         self._cache: dict[str, Optional[Any]] = {}
+        self._llm_engine_instance: Optional[Any] = None
 
     # ── Public API ──────────────────────────────────────────────────────────
+
+    @property
+    def _llm_engine(self) -> "Optional[Any]":
+        """Lazily instantiate the LLMQAEngine (once per FieldMapper instance)."""
+        if self._llm_engine_instance is None and _LLMQAEngine is not None:
+            profile_summary = self._build_profile_summary()
+            self._llm_engine_instance = _LLMQAEngine(
+                openai_api_key=self._openai_api_key,
+                profile_summary=profile_summary,
+                job_description=self._job_description,
+            )
+        return self._llm_engine_instance
+
+    def _build_profile_summary(self) -> str:
+        """Build a concise text summary of the applicant profile for LLM context."""
+        p = self._cfg
+        parts = []
+        name = f"{p.get('first_name', '')} {p.get('last_name', '')}".strip()
+        if name:
+            parts.append(f"Name: {name}")
+        if p.get("email"):
+            parts.append(f"Email: {p['email']}")
+        skills = p.get("skills") or []
+        if isinstance(skills, str):
+            skills_str = skills
+        else:
+            skills_str = ", ".join(skills[:10]) if skills else ""
+        if skills_str:
+            parts.append(f"Skills: {skills_str}")
+        edu_entries = p.get("education_entries") or []
+        if edu_entries:
+            first_edu = edu_entries[0] if isinstance(edu_entries, list) else {}
+            school = first_edu.get("school") or p.get("university", "")
+            degree = first_edu.get("degree") or p.get("degree", "")
+            if school or degree:
+                parts.append(f"Education: {degree} at {school}".strip(" at"))
+        exp_entries = p.get("experience_entries") or []
+        if exp_entries:
+            first_exp = exp_entries[0] if isinstance(exp_entries, list) else {}
+            company = first_exp.get("company", "")
+            title = first_exp.get("title", "")
+            if company or title:
+                parts.append(f"Most recent role: {title} at {company}".strip(" at"))
+        if p.get("years_experience"):
+            parts.append(f"Years of experience: {p['years_experience']}")
+        if p.get("work_authorization"):
+            parts.append(f"Work authorization: {p['work_authorization']}")
+        return "\n".join(parts)
+
+    def resolve_with_llm(self, label: str, options: "list[str] | None" = None) -> str:
+        """Directly call the LLM engine to answer a question.
+
+        Returns an empty string if LLM is unavailable or api key is not set.
+        """
+        engine = self._llm_engine
+        if engine is None:
+            return ""
+        try:
+            return engine.answer_question(label, options) or ""
+        except Exception:
+            return ""
 
     def resolve_qa(self, label: str) -> "Optional[Any]":
         """Try to resolve a form label using the user's pre-entered Q&A answer bank."""
@@ -149,6 +222,11 @@ class FieldMapper:
                     value = self.resolve_qa(syn)
                     if value is not None:
                         break
+        # Last resort: ask the LLM if Q&A bank and profile also returned nothing
+        if value is None:
+            llm_answer = self.resolve_with_llm(label)
+            if llm_answer:
+                value = llm_answer
         self._cache[cache_key] = value
         return value
 
@@ -173,9 +251,24 @@ class FieldMapper:
         # Fuzzy + fallback chain
         try:
             from careerfit.apply_agent.core.dropdown_matcher import resolve_dropdown_value
-            return resolve_dropdown_value(str(raw), available_options)
+            result = resolve_dropdown_value(str(raw), available_options)
+            if result:
+                return result
         except ImportError:
-            return None
+            pass
+        # Last resort: ask the LLM with the available options for context
+        llm_answer = self.resolve_with_llm(label, available_options)
+        if llm_answer:
+            # Match the LLM answer back to the available options
+            llm_lower = llm_answer.lower().strip()
+            for opt in available_options:
+                if opt.lower().strip() == llm_lower:
+                    return opt
+            # Partial match fallback
+            for opt in available_options:
+                if llm_lower in opt.lower() or opt.lower() in llm_lower:
+                    return opt
+        return None
 
     def cover_letter_for_job(self, job_title: str, company: str) -> str:
         """

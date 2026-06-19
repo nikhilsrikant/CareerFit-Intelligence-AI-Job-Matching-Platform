@@ -1181,6 +1181,7 @@ def init_state() -> None:
         "_db_loaded": False,
         "education_entries": [],
         "experience_entries": [],
+        "api_keys": {},
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -1195,6 +1196,7 @@ def init_state() -> None:
                 st.session_state.active_tab = "matching"
             st.session_state.applied_job_ids = _db.get_applied_job_ids()
             st.session_state.qa_answers = _db.load_qa_answers()
+            st.session_state.api_keys = _db.load_api_keys()
             st.session_state["_db_loaded"] = True
     except Exception:
         pass
@@ -2343,8 +2345,122 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
+def render_settings_tab() -> None:
+    """Render the Settings tab with API key management."""
+    from careerfit import db as _db
+
+    st.markdown("<h2 style='margin-bottom:8px'>&#x2699;&#xFE0F; Settings</h2>", unsafe_allow_html=True)
+    st.markdown(
+        "<p style='color:#64748B;margin-bottom:24px'>"
+        "Configure API keys for job discovery and AI-powered application assistance. "
+        "Keys are stored locally in your SQLite database and never sent to third parties."
+        "</p>",
+        unsafe_allow_html=True,
+    )
+
+    stored_keys = st.session_state.get("api_keys", {})
+
+    # ── OpenAI API Key ──────────────────────────────────────────────────────
+    st.markdown("### &#x1F916; OpenAI API Key")
+    st.markdown(
+        "<p style='color:#64748B;font-size:0.9rem;margin-bottom:8px'>"
+        "Used to answer unique application questions automatically using GPT-4o mini. "
+        "Leave blank to disable LLM-powered Q&amp;A."
+        "</p>",
+        unsafe_allow_html=True,
+    )
+    _oai_stored = stored_keys.get("openai_api_key", "")
+    _oai_indicator = " &#x2705;" if _oai_stored else ""
+    openai_key_input = st.text_input(
+        f"OpenAI API Key{_oai_indicator}",
+        value=_oai_stored,
+        type="password",
+        placeholder="sk-...",
+        key="settings_openai_key",
+        help="Get your key at https://platform.openai.com/api-keys",
+    )
+
+    st.markdown("---")
+
+    # ── Job Discovery APIs ──────────────────────────────────────────────────
+    st.markdown("### &#x1F50D; Job Discovery APIs")
+    st.markdown(
+        "<p style='color:#64748B;font-size:0.9rem;margin-bottom:8px'>"
+        "Add API keys to unlock additional job sources. "
+        "JSearch and Adzuna both have free tiers."
+        "</p>",
+        unsafe_allow_html=True,
+    )
+
+    _js_stored = stored_keys.get("jsearch_key", "")
+    _az_id_stored = stored_keys.get("adzuna_app_id", "")
+    _az_key_stored = stored_keys.get("adzuna_app_key", "")
+
+    _js_indicator = " &#x2705;" if _js_stored else ""
+    _az_indicator = " &#x2705;" if _az_id_stored and _az_key_stored else ""
+
+    _col1, _col2 = st.columns(2)
+    with _col1:
+        jsearch_key_input = st.text_input(
+            f"JSearch API Key (RapidAPI){_js_indicator}",
+            value=_js_stored,
+            type="password",
+            placeholder="Your RapidAPI key for JSearch",
+            key="settings_jsearch_key",
+            help="Sign up at https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch",
+        )
+        adzuna_id_input = st.text_input(
+            f"Adzuna App ID{_az_indicator}",
+            value=_az_id_stored,
+            type="password",
+            placeholder="Adzuna App ID",
+            key="settings_adzuna_id",
+            help="Register at https://developer.adzuna.com/",
+        )
+    with _col2:
+        adzuna_key_input = st.text_input(
+            f"Adzuna App Key{_az_indicator}",
+            value=_az_key_stored,
+            type="password",
+            placeholder="Adzuna App Key",
+            key="settings_adzuna_key",
+        )
+
+    st.markdown("---")
+
+    # ── Save button ─────────────────────────────────────────────────────────
+    if st.button("&#x1F4BE; Save API Keys", type="primary", key="settings_save_btn"):
+        try:
+            _db.save_api_keys(
+                jsearch_key=jsearch_key_input,
+                adzuna_app_id=adzuna_id_input,
+                adzuna_app_key=adzuna_key_input,
+                openai_api_key=openai_key_input,
+            )
+            st.session_state.api_keys = _db.load_api_keys()
+            st.success("API keys saved successfully!")
+        except Exception as _e:
+            st.error(f"Failed to save API keys: {_e}")
+
+    # ── Status summary ───────────────────────────────────────────────────────
+    st.markdown("### Key Status")
+    _status_items = [
+        ("OpenAI (LLM Q&A)", bool(stored_keys.get("openai_api_key"))),
+        ("JSearch (job discovery)", bool(stored_keys.get("jsearch_key"))),
+        ("Adzuna (job discovery)", bool(stored_keys.get("adzuna_app_id") and stored_keys.get("adzuna_app_key"))),
+    ]
+    for _name, _active in _status_items:
+        _icon = "&#x2705;" if _active else "&#x26AA;"
+        _label = "Configured" if _active else "Not configured"
+        st.markdown(
+            f"<span style='font-size:1rem'>{_icon} <strong>{_name}</strong> — {_label}</span>",
+            unsafe_allow_html=True,
+        )
+
+
 # Tab navigation
-tab_cols = st.columns([1, 1, 1])
+tab_cols = st.columns([1, 1, 1, 1])
 with tab_cols[0]:
     if st.button("&#x1F464; Profile Setup", use_container_width=True,
                  type="primary" if st.session_state.active_tab == "profile" else "secondary",
@@ -2362,6 +2478,12 @@ with tab_cols[2]:
                  type="primary" if st.session_state.active_tab == "autoapply" else "secondary",
                  key="tab_autoapply"):
         st.session_state.active_tab = "autoapply"
+        st.rerun()
+with tab_cols[3]:
+    if st.button("&#x2699;&#xFE0F; Settings", use_container_width=True,
+                 type="primary" if st.session_state.active_tab == "settings" else "secondary",
+                 key="tab_settings"):
+        st.session_state.active_tab = "settings"
         st.rerun()
 st.markdown("<hr style='border:none;border-top:1px solid #E2E8F0;margin:4px 0 20px'>", unsafe_allow_html=True)
 
@@ -2617,6 +2739,9 @@ elif st.session_state.active_tab == "profile":
 
 elif st.session_state.active_tab == "autoapply":
     render_autoapply_tab()
+
+elif st.session_state.active_tab == "settings":
+    render_settings_tab()
 
 # Insights and diagnostics remain on the same page, collapsed by default.
 with st.expander("Source health, analytics, and diagnostics", expanded=False):
