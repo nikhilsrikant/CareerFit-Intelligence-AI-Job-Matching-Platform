@@ -2232,6 +2232,10 @@ def render_settings_tab() -> None:
         "</p>",
         unsafe_allow_html=True,
     )
+    st.info(
+        "API keys are stored locally in a SQLite database on your machine. "
+        "They are not encrypted. Do not use this app on shared machines with sensitive API keys."
+    )
 
     stored_keys = st.session_state.get("api_keys", {})
 
@@ -2538,6 +2542,8 @@ if st.session_state.active_tab == "matching":
                         st.info("No new jobs found (all already in results or no matching roles).")
                 else:
                     st.warning("No jobs returned from APIs. Check Settings for API key configuration.")
+            except ImportError as _ie:
+                st.error(f"Job board module not available: {_ie}. Check that careerfit.job_board is installed.")
             except Exception as _api_err:
                 st.error(f"API job fetch error: {_api_err}")
         st.markdown("</div>", unsafe_allow_html=True)

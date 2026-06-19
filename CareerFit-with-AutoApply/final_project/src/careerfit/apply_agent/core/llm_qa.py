@@ -8,7 +8,10 @@ Gracefully degrades when:
 """
 from __future__ import annotations
 
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # Try to import openai — gracefully degrade if not installed
 try:
@@ -86,8 +89,11 @@ class LLMQAEngine:
                 max_tokens=256,
                 temperature=0.2,
             )
-            return response.choices[0].message.content.strip()
-        except Exception:
+            result = response.choices[0].message.content.strip()
+            logger.debug("LLM answered %r -> %r", question_label, result)
+            return result
+        except Exception as e:
+            logger.warning("LLM call failed for question %r: %s", question_label, e)
             return ""
 
     # ── Internal helpers ─────────────────────────────────────────────────────

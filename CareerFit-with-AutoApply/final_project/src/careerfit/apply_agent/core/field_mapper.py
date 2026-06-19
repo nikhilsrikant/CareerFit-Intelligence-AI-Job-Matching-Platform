@@ -138,6 +138,8 @@ class FieldMapper:
             parts.append(f"Name: {name}")
         if p.get("email"):
             parts.append(f"Email: {p['email']}")
+        if p.get("phone"):
+            parts.append(f"Phone: {p['phone']}")
         skills = p.get("skills") or []
         if isinstance(skills, str):
             skills_str = skills

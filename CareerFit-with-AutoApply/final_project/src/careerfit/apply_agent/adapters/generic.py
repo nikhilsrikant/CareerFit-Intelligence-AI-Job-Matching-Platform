@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from difflib import SequenceMatcher
 
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
 
@@ -19,6 +20,19 @@ from careerfit.apply_agent.adapters.base import BaseAdapter, SELECTOR_TIMEOUT
 from careerfit.apply_agent.core.field_mapper import FieldMapper
 
 logger = logging.getLogger(__name__)
+
+
+def _radio_matches(value_lower: str, opt_label: str, opt_value: str) -> bool:
+    """Return True when *value_lower* is a confident match for an option.
+
+    Uses exact match first, then a SequenceMatcher ratio >= 0.85 threshold to
+    avoid substring false-positives (e.g. "No" matching "No, I have no disability"
+    AND "No, I do not require sponsorship").
+    """
+    if opt_label == value_lower or opt_value.lower() == value_lower:
+        return True
+    ratio = SequenceMatcher(None, value_lower, opt_label).ratio()
+    return ratio >= 0.85
 
 
 class GenericAdapter(BaseAdapter):
@@ -153,9 +167,7 @@ class GenericAdapter(BaseAdapter):
                 for opt in options:
                     opt_label = (opt.get("label") or opt.get("value") or "").lower().strip()
                     opt_value = opt.get("value", "")
-                    if (opt_label == value_lower
-                            or opt_value.lower() == value_lower
-                            or value_lower in opt_label):
+                    if _radio_matches(value_lower, opt_label, opt_value):
                         try:
                             radio_sel = (
                                 f"input[type='radio'][name='{group['name']}']"

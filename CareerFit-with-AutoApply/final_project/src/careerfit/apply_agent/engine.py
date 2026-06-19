@@ -168,12 +168,17 @@ class ApplicationEngine:
             ats = (job.get("source") or job.get("ats") or "generic").lower()
             adapter = get_adapter(ats)
             logger.info("[%s] → %s (ATS: %s)", job.get("company"), job.get("title"), ats)
-            # Update job_description context for this specific job
+            # Update job_description context for this specific job.
+            # Only reset the LLM engine when the job description actually changes so that
+            # profile-derived answers (years of experience, work authorization, etc.) stay
+            # cached across jobs and don't trigger unnecessary LLM calls.
             if self._field_mapper is not None:
                 job_desc = job.get("description") or job.get("job_description") or ""
-                self._field_mapper._job_description = job_desc
-                self._field_mapper._llm_engine_instance = None  # reset so engine rebuilds with new JD
-                self._field_mapper._cache.clear()
+                prev_desc = getattr(self._field_mapper, '_job_description', '')
+                if job_desc != prev_desc:
+                    self._field_mapper._job_description = job_desc
+                    self._field_mapper._llm_engine_instance = None  # rebuild LLM engine with new JD
+                    # Do NOT clear the full cache — profile answers are job-independent
             result = await adapter.apply(page, self._field_mapper, job)
         except Exception as e:
             logger.exception("Error: %s", e)
